@@ -1,0 +1,659 @@
+# @bonkers-agency/grammy-test
+
+> Testing framework for grammY Telegram bots - simulate Telegram interactions without API calls.
+
+## Overview
+
+grammy-test enables comprehensive testing of grammY bots by intercepting API calls at the transport layer and routing them to a simulated Telegram server. Tests behave identically to production without network calls.
+
+## Installation
+
+```bash
+npm install @bonkers-agency/grammy-test --save-dev
+```
+
+Peer dependencies:
+- `grammy` >= 1.38.0 (required)
+- `@grammyjs/conversations` >= 2.0.0 (optional, for conversation testing)
+- `@grammyjs/runner` >= 2.0.0 (optional, for runner testing)
+
+## Quick Start
+
+```typescript
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { TestBot } from "@bonkers-agency/grammy-test";
+
+describe("MyBot", () => {
+  let testBot: TestBot;
+
+  beforeEach(() => {
+    testBot = new TestBot();
+    testBot.command("start", (ctx) => ctx.reply("Hello!"));
+  });
+
+  afterEach(() => {
+    testBot.dispose(); // Always clean up!
+  });
+
+  it("responds to /start", async () => {
+    const user = testBot.createUser({ first_name: "Alice" });
+    const chat = testBot.createChat({ type: "private" });
+
+    const response = await testBot.sendCommand(user, chat, "/start");
+
+    expect(response.text).toBe("Hello!");
+  });
+});
+```
+
+## Core API
+
+### TestBot Class
+
+TestBot extends grammY's Bot class and provides simulation methods.
+
+**Constructor:**
+```typescript
+new TestBot<C extends Context = Context>(options?: { botInfo?: UserFromGetMe })
+```
+
+**User/Chat Creation:**
+```typescript
+// Create test user (auto-generates IDs)
+const user = testBot.createUser({ first_name: "Alice", last_name?: string, username?: string });
+
+// Create chat
+const privateChat = testBot.createChat({ type: "private" });
+const group = testBot.createChat({ type: "group", title: "My Group" });
+const supergroup = testBot.createChat({ type: "supergroup", title: "My Supergroup" });
+const channel = testBot.createChat({ type: "channel", title: "My Channel" });
+const forum = testBot.createChat({ type: "supergroup", title: "Forum", is_forum: true });
+```
+
+**Role Management:**
+```typescript
+// Set user roles in chat
+testBot.setOwner(chat, user);      // Creator status
+testBot.setAdmin(chat, user, { can_delete_messages: true, ... });  // Admin with permissions
+testBot.setMember(chat, user);     // Regular member
+
+// Set bot permissions (required for admin operations)
+testBot.setBotAdmin(chat, { can_restrict_members: true, can_delete_messages: true });
+testBot.setBotMember(chat);        // Regular member, no admin rights
+```
+
+**Simulation Methods:**
+```typescript
+// Messages
+const response = await testBot.sendMessage(user, chat, "Hello");
+const response = await testBot.sendCommand(user, chat, "/start");
+const response = await testBot.sendCommand(user, chat, "/ban", { replyToMessageId: 123 });
+
+// Callbacks
+const response = await testBot.clickButton(user, chat, "callback_data", message);
+
+// Inline queries
+const response = await testBot.sendInlineQuery(user, "search term");
+
+// Media
+const response = await testBot.sendPhoto(user, chat, { width: 800, height: 600 });
+const response = await testBot.sendDocument(user, chat, { fileName: "doc.pdf", mimeType: "application/pdf" });
+const response = await testBot.sendVideo(user, chat, { width: 1920, height: 1080, duration: 60 });
+const response = await testBot.sendAudio(user, chat, { duration: 180, performer: "Artist", title: "Song" });
+
+// Polls
+const response = await testBot.sendPoll(user, chat, "Question?", ["A", "B", "C"]);
+await testBot.vote(user, poll, [0]);  // Vote for first option
+
+// Payments
+const response = await testBot.simulatePreCheckout(user, { id: "123", currency: "USD", total_amount: 1000, invoice_payload: "item" });
+const response = await testBot.simulateSuccessfulPayment(user, chat, { currency: "USD", total_amount: 1000, invoice_payload: "item", telegram_payment_charge_id: "charge", provider_payment_charge_id: "provider" });
+
+// Join requests
+const response = await testBot.simulateJoinRequest(user, chat);
+const response = await testBot.simulateJoinViaLink(user, chat, inviteLink);
+
+// Reactions
+const response = await testBot.sendReaction(user, chat, messageId, [{ type: "emoji", emoji: "👍" }]);
+
+// Cleanup (REQUIRED in afterEach)
+testBot.dispose();
+```
+
+### BotResponse Object
+
+Every simulation method returns a BotResponse:
+
+```typescript
+interface BotResponse {
+  // Messages
+  messages: Message[];           // All messages sent by bot
+  text: string | undefined;      // Last message text
+  texts: string[];               // All message texts
+  sentMessage: Message | undefined;  // First message sent
+
+  // Edits
+  editedMessages: Message[];
+  editedText: string | undefined;
+
+  // Deletions
+  deletedMessages: Message[];
+
+  // Keyboards
+  keyboard?: {
+    inline?: InlineKeyboardButton[][];  // Inline keyboard buttons
+    reply?: KeyboardButton[][];          // Reply keyboard buttons
+  };
+
+  // Callback answers
+  callbackAnswer?: {
+    text?: string;
+    showAlert?: boolean;
+    url?: string;
+    cache_time?: number;
+  };
+
+  // Polls
+  poll?: Poll;
+
+  // Invoices
+  invoice?: {
+    title: string;
+    description: string;
+    currency: string;
+    total_amount: number;
+  };
+
+  // Inline queries
+  inlineResults?: InlineQueryResult[];
+
+  // Pre-checkout
+  preCheckoutAnswer?: {
+    ok: boolean;
+    errorMessage?: string;
+  };
+
+  // Formatting
+  entities?: MessageEntity[];
+
+  // Errors
+  error?: {
+    code: number;
+    description: string;
+  };
+
+  // Debug
+  apiCalls: ApiCallRecord[];  // All API calls made
+
+  // Helper methods
+  hasText(text: string): boolean;
+  hasTextContaining(substring: string): boolean;
+  hasEntity(type: "bold" | "italic" | "code" | ...): boolean;
+}
+```
+
+### Conversation Testing
+
+```typescript
+import { session } from "grammy";
+import { conversations, createConversation } from "@grammyjs/conversations";
+import { createConversationTester } from "@bonkers-agency/grammy-test";
+
+// Define conversation
+async function surveyConversation(conversation, ctx) {
+  await ctx.reply("What's your name?");
+  const nameCtx = await conversation.waitFor("message:text");
+  const name = nameCtx.message.text;
+  await ctx.reply(`Hello, ${name}!`);
+}
+
+// Set up bot
+testBot.use(session({ initial: () => ({}) }));
+testBot.use(conversations());
+testBot.use(createConversation(surveyConversation));
+testBot.command("survey", (ctx) => ctx.conversation.enter("surveyConversation"));
+
+// Test multi-step flow
+const convo = createConversationTester(testBot, user, chat);
+const r1 = await convo.start("/survey");
+expect(r1.text).toBe("What's your name?");
+
+const r2 = await convo.say("Alice");
+expect(r2.text).toBe("Hello, Alice!");
+```
+
+## Bot Permission System
+
+The framework enforces bot permissions like real Telegram. Use `setBotAdmin()` before admin operations.
+
+**Permission Matrix:**
+
+| Operation | Required Permission |
+|-----------|-------------------|
+| `banChatMember`, `restrictChatMember`, `unbanChatMember` | `can_restrict_members` |
+| `setChatSlowModeDelay` | `can_restrict_members` |
+| `promoteChatMember`, `setChatAdministratorCustomTitle` | `can_promote_members` |
+| `pinChatMessage`, `unpinChatMessage`, `unpinAllChatMessages` | `can_pin_messages` |
+| `deleteMessage` (others' messages in groups) | `can_delete_messages` |
+| `createChatInviteLink`, `editChatInviteLink`, `revokeChatInviteLink` | `can_invite_users` |
+| `approveChatJoinRequest`, `declineChatJoinRequest` | `can_invite_users` |
+| `createForumTopic`, `editForumTopic`, `closeForumTopic`, `reopenForumTopic`, `deleteForumTopic` | `can_manage_topics` |
+| `setChatTitle`, `setChatDescription`, `setChatPhoto`, `deleteChatPhoto` | `can_change_info` |
+| `setChatPermissions` | `can_restrict_members` |
+
+**Example:**
+```typescript
+const group = testBot.createChat({ type: "supergroup", title: "Test" });
+const admin = testBot.createUser({ first_name: "Admin" });
+const target = testBot.createUser({ first_name: "Target" });
+
+testBot.setOwner(group, admin);
+testBot.setMember(group, target);
+
+// Bot needs permission to ban
+testBot.setBotAdmin(group, { can_restrict_members: true });
+
+testBot.command("ban", async (ctx) => {
+  await ctx.banChatMember(target.id);
+  await ctx.reply("Banned!");
+});
+
+const response = await testBot.sendCommand(admin, group, "/ban");
+expect(response.text).toBe("Banned!");
+```
+
+**Without permission:**
+```typescript
+// Without setBotAdmin, this throws:
+// GrammyError: Call to 'banChatMember' failed! (400: Bad Request: not enough rights to restrict/unrestrict chat member)
+```
+
+**Private chat behavior:**
+- Permission checks are skipped in private chats
+- Bot can delete both its own messages AND user messages in private chats
+
+## Testing Patterns
+
+### Pattern 1: Handler Factory (Recommended)
+
+```typescript
+// src/handlers.ts
+export function setupHandlers<C extends Context>(bot: Bot<C>) {
+  bot.command("start", (ctx) => ctx.reply("Welcome!"));
+  bot.on("message:text", (ctx) => ctx.reply(`Echo: ${ctx.message.text}`));
+}
+
+// src/index.ts (production)
+const bot = new Bot(process.env.BOT_TOKEN!);
+setupHandlers(bot);
+bot.start();
+
+// test/bot.test.ts
+import { TestBot } from "@bonkers-agency/grammy-test";
+import { setupHandlers } from "../src/handlers.js";
+
+beforeEach(() => {
+  testBot = new TestBot();
+  setupHandlers(testBot);  // Works because TestBot extends Bot
+});
+```
+
+### Pattern 2: Composer-Based Architecture
+
+```typescript
+// src/commands/admin.ts
+export const adminComposer = new Composer<MyContext>();
+adminComposer.command("ban", async (ctx) => { /* ... */ });
+
+// test/admin.test.ts
+beforeEach(() => {
+  testBot = new TestBot<MyContext>();
+  testBot.use(adminComposer);  // Test just admin commands
+});
+```
+
+### Pattern 3: Testing with Custom Context
+
+```typescript
+import type { Context, SessionFlavor } from "grammy";
+
+interface SessionData { count: number }
+type MyContext = Context & SessionFlavor<SessionData>;
+
+const testBot = new TestBot<MyContext>();
+testBot.use(session({ initial: () => ({ count: 0 }) }));
+```
+
+## State Access for Assertions
+
+```typescript
+// Chat state
+const chatData = testBot.server.chatState.getOrCreate(chat);
+expect(chatData.slowModeDelay).toBe(60);
+expect(chatData.permissions?.can_send_messages).toBe(false);
+
+// Member state
+const member = testBot.server.memberState.getMember(chat.id, user.id);
+expect(member?.status).toBe("administrator");
+expect(member?.status).toBe("kicked");  // "kicked" = banned
+
+// Poll state
+const poll = testBot.server.pollState.getPoll(pollId);
+expect(poll?.total_voter_count).toBe(5);
+expect(poll?.is_closed).toBe(true);
+
+// File state
+const file = testBot.server.fileState.getFile(fileId);
+expect(file?.file_unique_id).toBeDefined();
+
+// Invite links
+const links = testBot.server.chatState.getInviteLinks(chat.id);
+expect(links[0].member_limit).toBe(100);
+```
+
+## Complete Example: Admin Bot
+
+```typescript
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { TestBot } from "@bonkers-agency/grammy-test";
+import { BotError } from "grammy";
+
+describe("Admin Bot", () => {
+  let testBot: TestBot;
+
+  beforeEach(() => {
+    testBot = new TestBot();
+
+    testBot.command("ban", async (ctx) => {
+      // Check if user is admin
+      const member = await ctx.getChatMember(ctx.from!.id);
+      if (member.status !== "creator" && member.status !== "administrator") {
+        return ctx.reply("Admin only!");
+      }
+
+      // Get target from reply
+      const targetId = ctx.message?.reply_to_message?.from?.id;
+      if (!targetId) return ctx.reply("Reply to a user to ban them.");
+
+      await ctx.banChatMember(targetId);
+      return ctx.reply("User banned!");
+    });
+  });
+
+  afterEach(() => {
+    testBot.dispose();
+  });
+
+  it("rejects non-admin", async () => {
+    const member = testBot.createUser({ first_name: "Member" });
+    const group = testBot.createChat({ type: "supergroup", title: "Test" });
+    testBot.setMember(group, member);
+
+    const response = await testBot.sendCommand(member, group, "/ban");
+    expect(response.text).toBe("Admin only!");
+  });
+
+  it("bans user when admin with bot permissions", async () => {
+    const admin = testBot.createUser({ first_name: "Admin" });
+    const target = testBot.createUser({ first_name: "Target" });
+    const group = testBot.createChat({ type: "supergroup", title: "Test" });
+
+    testBot.setOwner(group, admin);
+    testBot.setMember(group, target);
+    testBot.setBotAdmin(group, { can_restrict_members: true });
+
+    // Target sends message
+    const targetMsg = await testBot.sendMessage(target, group, "Hi");
+
+    // Admin bans by replying
+    const response = await testBot.sendCommand(admin, group, "/ban", {
+      replyToMessageId: targetMsg.sentMessage!.message_id,
+    });
+
+    expect(response.text).toBe("User banned!");
+
+    // Verify status changed
+    const memberStatus = testBot.server.memberState.getMember(group.id, target.id);
+    expect(memberStatus?.status).toBe("kicked");
+  });
+
+  it("fails without bot permission", async () => {
+    const admin = testBot.createUser({ first_name: "Admin" });
+    const target = testBot.createUser({ first_name: "Target" });
+    const group = testBot.createChat({ type: "supergroup", title: "Test" });
+
+    testBot.setOwner(group, admin);
+    testBot.setMember(group, target);
+    // Note: NOT setting setBotAdmin
+
+    const targetMsg = await testBot.sendMessage(target, group, "Hi");
+
+    await expect(
+      testBot.sendCommand(admin, group, "/ban", {
+        replyToMessageId: targetMsg.sentMessage!.message_id,
+      })
+    ).rejects.toThrow(BotError);
+  });
+});
+```
+
+## Complete Example: Inline Keyboard
+
+```typescript
+testBot.command("menu", (ctx) => {
+  return ctx.reply("Choose an option:", {
+    reply_markup: {
+      inline_keyboard: [
+        [{ text: "Option A", callback_data: "opt_a" }],
+        [{ text: "Option B", callback_data: "opt_b" }],
+      ],
+    },
+  });
+});
+
+testBot.callbackQuery("opt_a", async (ctx) => {
+  await ctx.answerCallbackQuery("You chose A!");
+  return ctx.editMessageText("Selected: Option A");
+});
+
+it("handles button click", async () => {
+  const user = testBot.createUser();
+  const chat = testBot.createChat({ type: "private" });
+
+  const menuResponse = await testBot.sendCommand(user, chat, "/menu");
+  expect(menuResponse.keyboard?.inline?.[0][0].text).toBe("Option A");
+
+  const response = await testBot.clickButton(user, chat, "opt_a", menuResponse.messages[0]);
+
+  expect(response.callbackAnswer?.text).toBe("You chose A!");
+  expect(response.editedText).toBe("Selected: Option A");
+});
+```
+
+## Complete Example: Polls
+
+```typescript
+testBot.command("poll", (ctx) => {
+  return ctx.replyWithPoll("Favorite language?", ["TypeScript", "JavaScript", "Python"]);
+});
+
+testBot.on("poll_answer", (ctx) => {
+  console.log(`User ${ctx.pollAnswer.user?.id} voted for options: ${ctx.pollAnswer.option_ids}`);
+});
+
+it("creates and tracks votes", async () => {
+  const user = testBot.createUser();
+  const chat = testBot.createChat({ type: "group", title: "Test" });
+
+  const response = await testBot.sendCommand(user, chat, "/poll");
+  expect(response.poll?.question).toBe("Favorite language?");
+  expect(response.poll?.options).toHaveLength(3);
+
+  // Vote
+  await testBot.vote(user, response.poll!, [0]);
+
+  // Check vote recorded
+  const poll = testBot.server.pollState.getPoll(response.poll!.id);
+  expect(poll?.options[0].voter_count).toBe(1);
+});
+```
+
+## Complete Example: Forum Topics
+
+```typescript
+testBot.command("newtopic", async (ctx) => {
+  const topic = await ctx.createForumTopic("Discussion");
+  return ctx.reply(`Created topic: ${topic.name} (ID: ${topic.message_thread_id})`);
+});
+
+it("creates forum topic", async () => {
+  const admin = testBot.createUser({ first_name: "Admin" });
+  const forum = testBot.createChat({
+    type: "supergroup",
+    title: "Forum",
+    is_forum: true,
+  });
+
+  testBot.setOwner(forum, admin);
+  testBot.setBotAdmin(forum, { can_manage_topics: true });
+
+  const response = await testBot.sendCommand(admin, forum, "/newtopic");
+  expect(response.text).toContain("Created topic: Discussion");
+});
+```
+
+## Complete Example: Payments
+
+```typescript
+testBot.command("buy", (ctx) => {
+  return ctx.replyWithInvoice(
+    "Premium Plan",
+    "30 days of premium access",
+    "premium_30",
+    "XTR",
+    [{ label: "Premium", amount: 100 }]
+  );
+});
+
+testBot.on("pre_checkout_query", (ctx) => {
+  return ctx.answerPreCheckoutQuery(true);
+});
+
+testBot.on("message:successful_payment", (ctx) => {
+  return ctx.reply(`Thanks! Received ${ctx.message.successful_payment!.total_amount} stars.`);
+});
+
+it("handles payment flow", async () => {
+  const user = testBot.createUser();
+  const chat = testBot.createChat({ type: "private" });
+
+  // Invoice
+  const invoiceResponse = await testBot.sendCommand(user, chat, "/buy");
+  expect(invoiceResponse.invoice?.title).toBe("Premium Plan");
+
+  // Pre-checkout
+  const preCheckout = await testBot.simulatePreCheckout(user, {
+    id: "checkout_123",
+    currency: "XTR",
+    total_amount: 100,
+    invoice_payload: "premium_30",
+  });
+  expect(preCheckout.preCheckoutAnswer?.ok).toBe(true);
+
+  // Successful payment
+  const payment = await testBot.simulateSuccessfulPayment(user, chat, {
+    currency: "XTR",
+    total_amount: 100,
+    invoice_payload: "premium_30",
+    telegram_payment_charge_id: "charge_123",
+    provider_payment_charge_id: "provider_456",
+  });
+  expect(payment.text).toContain("100");
+});
+```
+
+## Error Handling
+
+**API errors via grammY (thrown):**
+```typescript
+import { BotError } from "grammy";
+
+it("throws on invalid operation", async () => {
+  testBot.command("edit", async (ctx) => {
+    await ctx.api.editMessageText(ctx.chat.id, 999999, "New text");
+  });
+
+  await expect(testBot.sendCommand(user, chat, "/edit")).rejects.toThrow(BotError);
+});
+```
+
+**Simulation errors (in response):**
+```typescript
+it("returns error in response", async () => {
+  const bannedUser = testBot.createUser();
+  testBot.server.memberState.ban(group.id, bannedUser.id);
+
+  const link = testBot.server.chatState.createInviteLink(group.id, admin, {});
+  const response = await testBot.simulateJoinViaLink(bannedUser, group, link!.invite_link);
+
+  expect(response.error).toBeDefined();
+  expect(response.error?.description).toContain("banned");
+});
+```
+
+## Architecture
+
+```
+src/
+  core/
+    TelegramServer.ts      # Simulates Telegram's backend API
+    TestClient.ts          # grammY transformer routing to TelegramServer
+    TestBot.ts             # Test harness (extends Bot)
+    BotResponse.ts         # Rich response object
+    UpdateFactory.ts       # Creates Telegram Updates
+    MarkdownParser.ts      # Parses Markdown/HTML to entities
+    ChatState.ts           # Chat settings, invite links
+    MemberState.ts         # Member status, restrictions
+    PollState.ts           # Poll tracking, votes
+    FileState.ts           # File storage
+    ConversationTester.ts  # Multi-step conversation helper
+  types/index.ts           # TypeScript definitions
+  index.ts                 # Public exports
+```
+
+**Data Flow:**
+```
+Test Code                    grammY                      grammy-test
+─────────────────────────────────────────────────────────────────────
+testBot.sendMessage()  →   bot.handleUpdate()
+                                  ↓
+                           middleware runs
+                                  ↓
+                           ctx.reply()
+                                  ↓
+                           bot.api.sendMessage()
+                                  ↓
+                           transformer chain    →    TestClient
+                                                         ↓
+                                                   TelegramServer
+                                                         ↓
+                                                   validates & stores
+                                                         ↓
+                                                   returns response
+```
+
+## Runtime Support
+
+| Runtime | Status |
+|---------|--------|
+| Node.js 18+ | Full support |
+| Bun | Full support |
+| Deno | Works via `npm:` specifier |
+
+## Important Notes
+
+1. **Always call `dispose()` in afterEach** - Required to restore global fetch
+2. **Bot permissions are enforced** - Use `setBotAdmin()` before admin operations
+3. **Telegram API terminology**: `"kicked"` status = banned (cannot rejoin), `"left"` = can rejoin
+4. **Middleware order matters** - Set up session and conversations BEFORE handlers
+5. **Type parameters** - Use `new TestBot<MyContext>()` with custom context types

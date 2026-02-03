@@ -1,0 +1,78 @@
+{
+  "name": "@bonkers-agency/grammy-test",
+  "version": "0.1.0",
+  "description": "Testing framework for grammY Telegram bots - simulate Telegram interactions without API calls",
+  "main": "dist/index.js",
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "bun": "./dist/index.js",
+      "deno": "./dist/index.js",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsc",
+    "clean": "rm -rf dist",
+    "dev": "tsc --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest",
+    "test:run": "vitest run",
+    "test:bun": "bun run vitest run",
+    "prepublishOnly": "npm run clean && npm run build && npm run test:run"
+  },
+  "keywords": [
+    "grammy",
+    "telegram",
+    "bot",
+    "testing",
+    "test",
+    "mock",
+    "unit-test",
+    "integration-test",
+    "bun",
+    "deno"
+  ],
+  "author": "BONKERS Agency",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/BONKERS-agency/grammy-test.git"
+  },
+  "bugs": {
+    "url": "https://github.com/BONKERS-agency/grammy-test/issues"
+  },
+  "homepage": "https://github.com/BONKERS-agency/grammy-test#readme",
+  "type": "module",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "peerDependencies": {
+    "@grammyjs/conversations": ">=2.0.0",
+    "@grammyjs/runner": ">=2.0.0",
+    "grammy": ">=1.38.0 <2"
+  },
+  "peerDependenciesMeta": {
+    "@grammyjs/conversations": {
+      "optional": true
+    },
+    "@grammyjs/runner": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@grammyjs/conversations": "^2.1.1",
+    "@grammyjs/runner": "^2.0.3",
+    "@types/node": "^20.0.0",
+    "grammy": "^1.38.0",
+    "typescript": "^5.0.0",
+    "vitest": "^2.0.0"
+  }
+}
