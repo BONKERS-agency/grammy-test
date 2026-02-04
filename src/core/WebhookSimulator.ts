@@ -1,11 +1,17 @@
-import type { Update } from "grammy/types";
 import { EventEmitter } from "node:events";
 import { Readable } from "node:stream";
+import type { Update } from "grammy/types";
 
 /**
  * Adapter types supported for webhook simulation.
  */
-export type WebhookAdapter = "express" | "hono" | "fastify" | "std/http" | "aws-lambda" | "node:http";
+export type WebhookAdapter =
+  | "express"
+  | "hono"
+  | "fastify"
+  | "std/http"
+  | "aws-lambda"
+  | "node:http";
 
 /**
  * Mock Express-like request object.
@@ -172,14 +178,16 @@ export class WebhookSimulator {
    */
   createExpress(
     update: Update,
-    options: WebhookOptions = {}
+    options: WebhookOptions = {},
   ): { req: MockExpressRequest; res: MockExpressResponse; getResult: () => ExpressResult } {
     const result = this.createExpressRequest(update, { ...this.defaultOptions, ...options });
     return {
       ...result,
       getResult: () => {
         const headers: Record<string, string> = {};
-        result.res.headers.forEach((v, k) => { headers[k] = v; });
+        result.res.headers.forEach((v, k) => {
+          headers[k] = v;
+        });
         return {
           status: result.res.statusCode,
           headers,
@@ -195,8 +203,10 @@ export class WebhookSimulator {
    */
   createHono(
     update: Update,
-    options: WebhookOptions = {}
-  ): MockHonoContext & { req: MockHonoContext["req"] & { header: (name: string) => string | undefined } } {
+    options: WebhookOptions = {},
+  ): MockHonoContext & {
+    req: MockHonoContext["req"] & { header: (name: string) => string | undefined };
+  } {
     const ctx = this.createHonoContext(update, { ...this.defaultOptions, ...options });
     // Add header() method to req for convenience
     const enhancedReq = {
@@ -215,7 +225,7 @@ export class WebhookSimulator {
    */
   createFastify(
     update: Update,
-    options: WebhookOptions = {}
+    options: WebhookOptions = {},
   ): { request: MockFastifyRequest; reply: MockFastifyReply } {
     return this.createFastifyObjects(update, { ...this.defaultOptions, ...options });
   }
@@ -234,7 +244,7 @@ export class WebhookSimulator {
    */
   createExpressRequest(
     update: Update,
-    options: WebhookOptions = {}
+    options: WebhookOptions = {},
   ): { req: MockExpressRequest; res: MockExpressResponse } {
     const headers: Record<string, string> = {
       "content-type": "application/json",
@@ -319,10 +329,7 @@ export class WebhookSimulator {
   /**
    * Create a mock Hono context.
    */
-  createHonoContext(
-    update: Update,
-    options: WebhookOptions = {}
-  ): MockHonoContext {
+  createHonoContext(update: Update, options: WebhookOptions = {}): MockHonoContext {
     const headers = new Headers({
       "content-type": "application/json",
       ...(options.secretToken && { "x-telegram-bot-api-secret-token": options.secretToken }),
@@ -369,7 +376,9 @@ export class WebhookSimulator {
         if (status !== undefined) ctx._status = status;
         ctx._body = data;
         const responseHeaders: Record<string, string> = {};
-        ctx._headers.forEach((v, k) => { responseHeaders[k] = v; });
+        ctx._headers.forEach((v, k) => {
+          responseHeaders[k] = v;
+        });
         return new Response(data, {
           status: ctx._status,
           headers: responseHeaders,
@@ -381,7 +390,9 @@ export class WebhookSimulator {
         ctx._body = JSON.stringify(data);
         ctx._headers.set("content-type", "application/json");
         const responseHeaders: Record<string, string> = {};
-        ctx._headers.forEach((v, k) => { responseHeaders[k] = v; });
+        ctx._headers.forEach((v, k) => {
+          responseHeaders[k] = v;
+        });
         return new Response(ctx._body, {
           status: ctx._status,
           headers: responseHeaders,
@@ -393,7 +404,9 @@ export class WebhookSimulator {
         ctx._body = data;
         ctx._headers.set("content-type", "text/plain");
         const responseHeaders: Record<string, string> = {};
-        ctx._headers.forEach((v, k) => { responseHeaders[k] = v; });
+        ctx._headers.forEach((v, k) => {
+          responseHeaders[k] = v;
+        });
         return new Response(ctx._body, {
           status: ctx._status,
           headers: responseHeaders,
@@ -409,7 +422,7 @@ export class WebhookSimulator {
    */
   createFastifyObjects(
     update: Update,
-    options: WebhookOptions = {}
+    options: WebhookOptions = {},
   ): { request: MockFastifyRequest; reply: MockFastifyReply } {
     const headers: Record<string, string> = {
       "content-type": "application/json",
@@ -441,7 +454,7 @@ export class WebhookSimulator {
         return this;
       },
 
-      send(payload?: string | Buffer | object) {
+      send(_payload?: string | Buffer | object) {
         this.sent = true;
         return this;
       },
@@ -459,7 +472,7 @@ export class WebhookSimulator {
    */
   createNodeHttpObjects(
     update: Update,
-    options: WebhookOptions = {}
+    options: WebhookOptions = {},
   ): { req: MockIncomingMessage; res: MockServerResponse } {
     const body = JSON.stringify(update);
     const headers: Record<string, string> = {
@@ -529,10 +542,7 @@ export class WebhookSimulator {
   /**
    * Create a standard Web Request object (for Deno, Bun, Cloudflare Workers).
    */
-  createWebRequest(
-    update: Update,
-    options: WebhookOptions = {}
-  ): Request {
+  createWebRequest(update: Update, options: WebhookOptions = {}): Request {
     const headers = new Headers({
       "content-type": "application/json",
       ...(options.secretToken && { "x-telegram-bot-api-secret-token": options.secretToken }),
@@ -553,7 +563,7 @@ export class WebhookSimulator {
    */
   createLambdaEvent(
     update: Update,
-    options: WebhookOptions = {}
+    options: WebhookOptions = {},
   ): {
     event: {
       httpMethod: string;
@@ -609,14 +619,16 @@ export class WebhookSimulator {
     adapter: WebhookAdapter,
     update: Update,
     handler: (req: unknown, res?: unknown) => Promise<unknown> | unknown,
-    options: WebhookOptions = {}
+    options: WebhookOptions = {},
   ): Promise<WebhookSimulationResult> {
     switch (adapter) {
       case "express": {
         const { req, res } = this.createExpressRequest(update, options);
         await handler(req, res);
         const headers: Record<string, string> = {};
-        res.headers.forEach((v, k) => { headers[k] = v; });
+        res.headers.forEach((v, k) => {
+          headers[k] = v;
+        });
         return {
           statusCode: res.statusCode,
           headers,
@@ -626,10 +638,12 @@ export class WebhookSimulator {
 
       case "hono": {
         const ctx = this.createHonoContext(update, options);
-        const response = await handler(ctx) as Response | undefined;
+        const response = (await handler(ctx)) as Response | undefined;
         if (response) {
           const headers: Record<string, string> = {};
-          response.headers.forEach((v, k) => { headers[k] = v; });
+          response.headers.forEach((v, k) => {
+            headers[k] = v;
+          });
           return {
             statusCode: response.status,
             headers,
@@ -637,7 +651,9 @@ export class WebhookSimulator {
           };
         }
         const resultHeaders: Record<string, string> = {};
-        ctx._headers.forEach((v, k) => { resultHeaders[k] = v; });
+        ctx._headers.forEach((v, k) => {
+          resultHeaders[k] = v;
+        });
         return {
           statusCode: ctx._status,
           headers: resultHeaders,
@@ -649,7 +665,9 @@ export class WebhookSimulator {
         const { request, reply } = this.createFastifyObjects(update, options);
         await handler(request, reply);
         const headers: Record<string, string> = {};
-        reply.headers.forEach((v, k) => { headers[k] = v; });
+        reply.headers.forEach((v, k) => {
+          headers[k] = v;
+        });
         return {
           statusCode: reply.statusCode,
           headers,
@@ -660,9 +678,11 @@ export class WebhookSimulator {
       case "std/http":
       case "node:http": {
         const req = this.createWebRequest(update, options);
-        const response = await handler(req) as Response;
+        const response = (await handler(req)) as Response;
         const headers: Record<string, string> = {};
-        response.headers.forEach((v, k) => { headers[k] = v; });
+        response.headers.forEach((v, k) => {
+          headers[k] = v;
+        });
         return {
           statusCode: response.status,
           headers,
@@ -672,7 +692,7 @@ export class WebhookSimulator {
 
       case "aws-lambda": {
         const { event, context } = this.createLambdaEvent(update, options);
-        const response = await handler(event, context) as {
+        const response = (await handler(event, context)) as {
           statusCode: number;
           headers?: Record<string, string>;
           body?: string;

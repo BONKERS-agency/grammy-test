@@ -1,14 +1,28 @@
 import type {
-  User,
+  ChatAdministratorRights,
   ChatMember,
   ChatPermissions,
-  ChatAdministratorRights,
+  PhotoSize,
+  User,
 } from "grammy/types";
 
 /**
  * Chat member status.
  */
-export type MemberStatus = "creator" | "administrator" | "member" | "restricted" | "left" | "kicked";
+export type MemberStatus =
+  | "creator"
+  | "administrator"
+  | "member"
+  | "restricted"
+  | "left"
+  | "kicked";
+
+/**
+ * Profile photo stored for a user.
+ */
+export interface StoredProfilePhoto {
+  photos: PhotoSize[][];
+}
 
 /**
  * Stored member data including restrictions and admin rights.
@@ -35,6 +49,8 @@ export interface StoredMember {
   lastMessageTime: number;
   /** Invite link used to join (internal tracking) */
   inviteLink?: string;
+  /** Premium status */
+  is_premium?: boolean;
 }
 
 /**
@@ -61,8 +77,17 @@ export class MemberState {
   /** Rate limit state per chat */
   private rateLimits = new Map<number, RateLimitState>();
 
+  /** User profile photos: userId -> array of photo arrays */
+  private profilePhotos = new Map<number, PhotoSize[][]>();
+
   /** Simulated current time (can be advanced for testing) */
   private currentTime: number = Date.now();
+
+  /** File ID counter for generating unique IDs */
+  private fileIdCounter = 1;
+
+  /** Premium users (tracked globally, not per-chat) */
+  private premiumUsers = new Set<number>();
 
   /**
    * Get the current simulated time.
@@ -157,14 +182,18 @@ export class MemberState {
    */
   getAdministrators(chatId: number): StoredMember[] {
     return this.getAllMembers(chatId).filter(
-      (m) => m.status === "administrator" || m.status === "creator"
+      (m) => m.status === "administrator" || m.status === "creator",
     );
   }
 
   /**
    * Set a member as the chat owner (creator).
    */
-  setOwner(chatId: number, user: User, options: { customTitle?: string; isAnonymous?: boolean } = {}): StoredMember {
+  setOwner(
+    chatId: number,
+    user: User,
+    options: { customTitle?: string; isAnonymous?: boolean } = {},
+  ): StoredMember {
     const member = this.setMember(chatId, user, "creator");
     member.custom_title = options.customTitle;
     member.is_anonymous = options.isAnonymous ?? false;
@@ -194,7 +223,7 @@ export class MemberState {
     chatId: number,
     user: User,
     rights: Partial<ChatAdministratorRights>,
-    options: { customTitle?: string; isAnonymous?: boolean } = {}
+    options: { customTitle?: string; isAnonymous?: boolean } = {},
   ): StoredMember {
     const member = this.setMember(chatId, user, "administrator");
     const isAnonymous = options.isAnonymous ?? rights.is_anonymous ?? false;
@@ -242,7 +271,7 @@ export class MemberState {
     chatId: number,
     userId: number,
     permissions: ChatPermissions,
-    untilDate: number = 0
+    untilDate: number = 0,
   ): boolean {
     const member = this.getMember(chatId, userId);
     if (!member) return false;
@@ -423,7 +452,8 @@ export class MemberState {
           can_send_voice_notes: member.restrictedPermissions?.can_send_voice_notes ?? false,
           can_send_polls: member.restrictedPermissions?.can_send_polls ?? false,
           can_send_other_messages: member.restrictedPermissions?.can_send_other_messages ?? false,
-          can_add_web_page_previews: member.restrictedPermissions?.can_add_web_page_previews ?? false,
+          can_add_web_page_previews:
+            member.restrictedPermissions?.can_add_web_page_previews ?? false,
           can_change_info: member.restrictedPermissions?.can_change_info ?? false,
           can_invite_users: member.restrictedPermissions?.can_invite_users ?? false,
           can_pin_messages: member.restrictedPermissions?.can_pin_messages ?? false,
@@ -473,7 +503,7 @@ export class MemberState {
     chatId: number,
     userId: number,
     chatType: string,
-    slowModeDelay: number
+    slowModeDelay: number,
   ): { allowed: boolean; retryAfter?: number } {
     const now = this.timestamp();
     const state = this.getRateLimit(chatId);
@@ -539,6 +569,108 @@ export class MemberState {
     this.rateLimits.delete(chatId);
   }
 
+  // === Profile Photos ===
+
+  /**
+   * Add a profile photo for a user.
+   */
+  addProfilePhoto(userId: number, width: number = 640, height: number = 640): PhotoSize[][] {
+    const photos = this.profilePhotos.get(userId) || [];
+
+    // Use a single base ID for this photo set, with separate unique IDs for each size
+    const baseId = this.fileIdCounter++;
+    const smallId = this.fileIdCounter++;
+    const mediumId = this.fileIdCounter++;
+    const largeId = this.fileIdCounter++;
+
+    // Generate different sizes (like Telegram does)
+    const sizes: PhotoSize[] = [
+      {
+        file_id: `profile_${userId}_${baseId}_small`,
+        file_unique_id: `unique_${smallId}`,
+        width: Math.round(width * 0.25),
+        height: Math.round(height * 0.25),
+        file_size: 5000,
+      },
+      {
+        file_id: `profile_${userId}_${baseId}_medium`,
+        file_unique_id: `unique_${mediumId}`,
+        width: Math.round(width * 0.5),
+        height: Math.round(height * 0.5),
+        file_size: 15000,
+      },
+      {
+        file_id: `profile_${userId}_${baseId}_large`,
+        file_unique_id: `unique_${largeId}`,
+        width,
+        height,
+        file_size: 50000,
+      },
+    ];
+
+    // Add to the beginning (most recent first)
+    photos.unshift(sizes);
+    this.profilePhotos.set(userId, photos);
+
+    return photos;
+  }
+
+  /**
+   * Get profile photos for a user.
+   */
+  getProfilePhotos(
+    userId: number,
+    offset: number = 0,
+    limit: number = 100,
+  ): { total_count: number; photos: PhotoSize[][] } {
+    const allPhotos = this.profilePhotos.get(userId) || [];
+    const photos = allPhotos.slice(offset, offset + limit);
+
+    return {
+      total_count: allPhotos.length,
+      photos,
+    };
+  }
+
+  /**
+   * Remove all profile photos for a user.
+   */
+  clearProfilePhotos(userId: number): void {
+    this.profilePhotos.delete(userId);
+  }
+
+  // === Premium Status ===
+
+  /**
+   * Set premium status for a user (globally, not chat-specific).
+   * This is tracked per user across all chats they're in.
+   */
+  setPremium(userId: number, isPremium: boolean): void {
+    // Track premium status globally
+    if (isPremium) {
+      this.premiumUsers.add(userId);
+    } else {
+      this.premiumUsers.delete(userId);
+    }
+
+    // Update all existing member records for this user
+    for (const [, chatMembers] of this.members) {
+      const member = chatMembers.get(userId);
+      if (member) {
+        member.is_premium = isPremium;
+        // Also update the user object to reflect premium status
+        (member.user as { is_premium?: boolean }).is_premium = isPremium;
+      }
+    }
+  }
+
+  /**
+   * Check if a user has premium status.
+   */
+  isPremium(userId: number): boolean {
+    return this.premiumUsers.has(userId);
+  }
+
   // === State Management ===
 
   /**
@@ -547,7 +679,10 @@ export class MemberState {
   reset(): void {
     this.members.clear();
     this.rateLimits.clear();
+    this.profilePhotos.clear();
+    this.premiumUsers.clear();
     this.currentTime = Date.now();
+    this.fileIdCounter = 1;
   }
 
   /**

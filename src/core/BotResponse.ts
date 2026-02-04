@@ -1,12 +1,12 @@
 import type {
-  Message,
-  Poll,
-  MessageEntity,
-  InlineKeyboardButton,
-  KeyboardButton,
-  InlineQueryResult,
   ChatInviteLink,
+  InlineKeyboardButton,
+  InlineQueryResult,
   Invoice,
+  KeyboardButton,
+  Message,
+  MessageEntity,
+  Poll,
 } from "grammy/types";
 import type { ApiCallRecord } from "./TestClient.js";
 
@@ -113,10 +113,12 @@ export class BotResponse {
   /**
    * Get keyboard from the last message (inline or reply).
    */
-  get keyboard(): {
-    inline?: InlineKeyboardButton[][];
-    reply?: KeyboardButton[][];
-  } | undefined {
+  get keyboard():
+    | {
+        inline?: InlineKeyboardButton[][];
+        reply?: KeyboardButton[][];
+      }
+    | undefined {
     const lastMsg = this.messages[this.messages.length - 1];
     if (!lastMsg || !("reply_markup" in lastMsg)) {
       return undefined;

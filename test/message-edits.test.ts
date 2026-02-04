@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { TestBot } from "../src/index.js";
 
 describe("Message Edits", () => {
@@ -16,7 +16,7 @@ describe("Message Edits", () => {
     it("should handle user editing their text message", async () => {
       // Setup handler for edited messages
       testBot.on("edited_message:text", (ctx) => {
-        ctx.reply(`You edited your message to: ${ctx.editedMessage!.text}`);
+        ctx.reply(`You edited your message to: ${ctx.editedMessage?.text}`);
       });
 
       const user = testBot.createUser({ first_name: "Alice" });
@@ -32,7 +32,7 @@ describe("Message Edits", () => {
       let receivedEditDate: number | undefined;
 
       testBot.on("edited_message:text", (ctx) => {
-        receivedEditDate = ctx.editedMessage!.edit_date;
+        receivedEditDate = ctx.editedMessage?.edit_date;
         ctx.reply("Edit received");
       });
 
@@ -49,20 +49,16 @@ describe("Message Edits", () => {
       let receivedEntities: unknown;
 
       testBot.on("edited_message:text", (ctx) => {
-        receivedEntities = ctx.editedMessage!.entities;
+        receivedEntities = ctx.editedMessage?.entities;
         ctx.reply("Formatted edit received");
       });
 
       const user = testBot.createUser({ first_name: "Charlie" });
       const chat = testBot.createChat({ type: "private" });
 
-      const response = await testBot.editUserMessage(
-        user,
-        chat,
-        1,
-        "*bold* and _italic_",
-        { parseMode: "Markdown" }
-      );
+      const response = await testBot.editUserMessage(user, chat, 1, "*bold* and _italic_", {
+        parseMode: "Markdown",
+      });
 
       expect(response.text).toBe("Formatted edit received");
       expect(receivedEntities).toBeDefined();
@@ -94,7 +90,7 @@ describe("Message Edits", () => {
       let receivedMessageId: number | undefined;
 
       testBot.on("edited_message:text", (ctx) => {
-        receivedMessageId = ctx.editedMessage!.message_id;
+        receivedMessageId = ctx.editedMessage?.message_id;
         ctx.reply(`Edited message ID: ${receivedMessageId}`);
       });
 
@@ -119,8 +115,8 @@ describe("Message Edits", () => {
       });
 
       testBot.command("edit", async (ctx) => {
-        if (sentMessageId) {
-          await ctx.api.editMessageText(ctx.chat!.id, sentMessageId, "Edited by command!");
+        if (sentMessageId && ctx.chat) {
+          await ctx.api.editMessageText(ctx.chat.id, sentMessageId, "Edited by command!");
         }
       });
 
@@ -146,13 +142,10 @@ describe("Message Edits", () => {
       });
 
       testBot.command("format", async (ctx) => {
-        if (sentMessageId) {
-          await ctx.api.editMessageText(
-            ctx.chat!.id,
-            sentMessageId,
-            "*Now bold* and _italic_",
-            { parse_mode: "Markdown" }
-          );
+        if (sentMessageId && ctx.chat) {
+          await ctx.api.editMessageText(ctx.chat.id, sentMessageId, "*Now bold* and _italic_", {
+            parse_mode: "Markdown",
+          });
         }
       });
 
@@ -201,7 +194,7 @@ describe("Message Edits", () => {
         user,
         chat,
         "opt_a",
-        menuResponse.messages[0]
+        menuResponse.messages[0],
       );
       expect(clickResponse.callbackAnswer?.text).toBe("Selected A");
       expect(clickResponse.editedText).toBe("You chose Option A!");
@@ -242,7 +235,7 @@ describe("Message Edits", () => {
         user,
         chat,
         "continue",
-        startResponse.messages[0]
+        startResponse.messages[0],
       );
       expect(continueResponse.editedText).toBe("Step 2");
 
@@ -251,7 +244,7 @@ describe("Message Edits", () => {
         user,
         chat,
         "finish",
-        continueResponse.editedMessages[0]
+        continueResponse.editedMessages[0],
       );
       expect(finishResponse.editedText).toBe("Completed!");
     });
@@ -284,19 +277,19 @@ describe("Message Edits", () => {
         user,
         chat,
         "click",
-        buttonsResponse.messages[0]
+        buttonsResponse.messages[0],
       );
 
       // Message text should remain unchanged, only markup updated
       expect(clickResponse.editedMessages[0]?.reply_markup?.inline_keyboard?.[0]?.[0]?.text).toBe(
-        "Clicked!"
+        "Clicked!",
       );
     });
   });
 
   describe("Bot Editing Messages via Worker", () => {
     it("should edit message from worker after async processing", async () => {
-      const user = testBot.createUser({ first_name: "Kate" });
+      const _user = testBot.createUser({ first_name: "Kate" });
       const chat = testBot.createChat({ type: "private" });
       const worker = testBot.createWorkerSimulator();
 
@@ -311,7 +304,7 @@ describe("Message Edits", () => {
     });
 
     it("should handle progress updates via edits", async () => {
-      const user = testBot.createUser({ first_name: "Leo" });
+      const _user = testBot.createUser({ first_name: "Leo" });
       const chat = testBot.createChat({ type: "private" });
       const worker = testBot.createWorkerSimulator();
 
@@ -346,7 +339,7 @@ describe("Message Edits", () => {
       const edits: string[] = [];
 
       testBot.on("edited_message:text", (ctx) => {
-        edits.push(ctx.editedMessage!.text!);
+        edits.push(ctx.editedMessage?.text ?? "");
       });
 
       const user = testBot.createUser({ first_name: "Nancy" });
@@ -362,7 +355,7 @@ describe("Message Edits", () => {
 
     it("should handle reply to edited message", async () => {
       testBot.on("edited_message:text", async (ctx) => {
-        await ctx.reply(`I saw you edit message ${ctx.editedMessage!.message_id}`);
+        await ctx.reply(`I saw you edit message ${ctx.editedMessage?.message_id}`);
       });
 
       const user = testBot.createUser({ first_name: "Oscar" });
@@ -376,8 +369,10 @@ describe("Message Edits", () => {
     it("should handle bot trying to edit non-existent message", async () => {
       testBot.command("edit_fake", async (ctx) => {
         try {
-          await ctx.api.editMessageText(ctx.chat!.id, 99999, "This won't work");
-        } catch (error) {
+          if (ctx.chat) {
+            await ctx.api.editMessageText(ctx.chat.id, 99999, "This won't work");
+          }
+        } catch (_error) {
           await ctx.reply("Failed to edit: message not found");
         }
       });
@@ -395,16 +390,16 @@ describe("Message Edits", () => {
 
   describe("Complex Edit Scenarios", () => {
     it("should handle conversation with message editing", async () => {
-      let currentMessageId: number | undefined;
+      let _currentMessageId: number | undefined;
 
       testBot.command("start_order", async (ctx) => {
         const msg = await ctx.reply("What would you like to order?");
-        currentMessageId = msg.message_id;
+        _currentMessageId = msg.message_id;
       });
 
       // User edits their order while in conversation
       testBot.on("edited_message:text", async (ctx) => {
-        await ctx.reply(`Order updated to: ${ctx.editedMessage!.text}`);
+        await ctx.reply(`Order updated to: ${ctx.editedMessage?.text}`);
       });
 
       testBot.on("message:text", async (ctx) => {
@@ -429,7 +424,7 @@ describe("Message Edits", () => {
         user,
         chat,
         orderResponse.messages[0]?.message_id ?? 2,
-        "Pizza with extra cheese"
+        "Pizza with extra cheese",
       );
       expect(editResponse.text).toBe("Order updated to: Pizza with extra cheese");
     });
@@ -437,7 +432,9 @@ describe("Message Edits", () => {
     it("should track both sent and edited messages in response", async () => {
       testBot.command("multi", async (ctx) => {
         const msg = await ctx.reply("Initial");
-        await ctx.api.editMessageText(ctx.chat!.id, msg.message_id, "Edited immediately");
+        if (ctx.chat) {
+          await ctx.api.editMessageText(ctx.chat.id, msg.message_id, "Edited immediately");
+        }
         await ctx.reply("Follow up");
       });
 
@@ -465,7 +462,7 @@ describe("Message Edits", () => {
       });
 
       testBot.callbackQuery(/^cat_/, async (ctx) => {
-        const category = ctx.callbackQuery.data!.replace("cat_", "");
+        const category = (ctx.callbackQuery.data ?? "").replace("cat_", "");
         await ctx.answerCallbackQuery();
         await ctx.editMessageText(`Step 2: Selected ${category}. Choose subcategory:`, {
           reply_markup: {

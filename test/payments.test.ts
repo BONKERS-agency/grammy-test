@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { TestBot } from "../src/index.js";
 
 describe("Payments", () => {
@@ -23,7 +23,7 @@ describe("Payments", () => {
           "30 days of premium features",
           "premium_30",
           "XTR",
-          [{ label: "Premium Subscription", amount: 500 }]
+          [{ label: "Premium Subscription", amount: 500 }],
         );
       });
 
@@ -52,7 +52,7 @@ describe("Payments", () => {
             photo_size: 1024,
             photo_width: 400,
             photo_height: 400,
-          }
+          },
         );
       });
 
@@ -86,10 +86,17 @@ describe("Payments", () => {
       const chat = testBot.createChat({ type: "private" });
 
       testBot.command("shop", async (ctx) => {
-        await ctx.replyWithInvoice("Physical Item", "Requires shipping", "physical_001", "USD", [{ label: "Item", amount: 5000 }], {
-          need_shipping_address: true,
-          is_flexible: true,
-        });
+        await ctx.replyWithInvoice(
+          "Physical Item",
+          "Requires shipping",
+          "physical_001",
+          "USD",
+          [{ label: "Item", amount: 5000 }],
+          {
+            need_shipping_address: true,
+            is_flexible: true,
+          },
+        );
       });
 
       const response = await testBot.sendCommand(user, chat, "/shop");
@@ -100,15 +107,15 @@ describe("Payments", () => {
 
   describe("Pre-Checkout Query", () => {
     it("should handle pre-checkout query approval", async () => {
-      let preCheckoutHandled = false;
+      let _preCheckoutHandled = false;
 
       testBot.on("pre_checkout_query", async (ctx) => {
-        preCheckoutHandled = true;
+        _preCheckoutHandled = true;
         await ctx.answerPreCheckoutQuery(true);
       });
 
       const user = testBot.createUser({ first_name: "Eve" });
-      const chat = testBot.createChat({ type: "private" });
+      const _chat = testBot.createChat({ type: "private" });
 
       await testBot.simulatePreCheckout(user, {
         id: "precheckout_123",
@@ -117,7 +124,7 @@ describe("Payments", () => {
         invoice_payload: "premium_30",
       });
 
-      expect(preCheckoutHandled).toBe(true);
+      expect(_preCheckoutHandled).toBe(true);
     });
 
     it("should handle pre-checkout query rejection", async () => {
@@ -217,7 +224,7 @@ describe("Payments", () => {
 
       testBot.on("message:successful_payment", async (ctx) => {
         paymentReceived = true;
-        receivedAmount = ctx.message.successful_payment!.total_amount;
+        receivedAmount = ctx.message.successful_payment?.total_amount;
         await ctx.reply("Thank you for your purchase!");
       });
 
@@ -241,7 +248,7 @@ describe("Payments", () => {
       let customerEmail: string | undefined;
 
       testBot.on("message:successful_payment", async (ctx) => {
-        customerEmail = ctx.message.successful_payment!.order_info?.email;
+        customerEmail = ctx.message.successful_payment?.order_info?.email;
         await ctx.reply(`Receipt sent to ${customerEmail}`);
       });
 
@@ -272,12 +279,15 @@ describe("Payments", () => {
       } | null = null;
 
       testBot.on("message:successful_payment", (ctx) => {
-        receivedPayment = {
-          currency: ctx.message.successful_payment!.currency,
-          total_amount: ctx.message.successful_payment!.total_amount,
-          invoice_payload: ctx.message.successful_payment!.invoice_payload,
-          telegram_payment_charge_id: ctx.message.successful_payment!.telegram_payment_charge_id,
-        };
+        const payment = ctx.message.successful_payment;
+        if (payment) {
+          receivedPayment = {
+            currency: payment.currency,
+            total_amount: payment.total_amount,
+            invoice_payload: payment.invoice_payload,
+            telegram_payment_charge_id: payment.telegram_payment_charge_id,
+          };
+        }
         ctx.reply("Payment processed");
       });
 
@@ -345,7 +355,9 @@ describe("Payments", () => {
       testBot.on("shipping_query", async (ctx) => {
         const country = ctx.shippingQuery.shipping_address.country_code;
         if (country !== "US") {
-          await ctx.answerShippingQuery(false, { error_message: "We only ship to the United States" });
+          await ctx.answerShippingQuery(false, {
+            error_message: "We only ship to the United States",
+          });
           rejectionMessage = "We only ship to the United States";
         } else {
           await ctx.answerShippingQuery(true, {
@@ -380,7 +392,9 @@ describe("Payments", () => {
       const events: string[] = [];
 
       testBot.command("buy", async (ctx) => {
-        await ctx.replyWithInvoice("Test Product", "A test product", "test_001", "XTR", [{ label: "Product", amount: 100 }]);
+        await ctx.replyWithInvoice("Test Product", "A test product", "test_001", "XTR", [
+          { label: "Product", amount: 100 },
+        ]);
         events.push("invoice_sent");
       });
 
@@ -460,7 +474,7 @@ describe("Payments", () => {
       let currencyReceived: string | undefined;
 
       testBot.on("message:successful_payment", async (ctx) => {
-        currencyReceived = ctx.message.successful_payment!.currency;
+        currencyReceived = ctx.message.successful_payment?.currency;
         await ctx.reply("Stars payment received!");
       });
 

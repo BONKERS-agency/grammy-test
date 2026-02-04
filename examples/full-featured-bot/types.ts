@@ -1,8 +1,5 @@
-import type { Context, SessionFlavor, Api, RawApi } from "grammy";
-import type {
-  Conversation,
-  ConversationFlavor,
-} from "@grammyjs/conversations";
+import type { Conversation, ConversationFlavor } from "@grammyjs/conversations";
+import type { Context, SessionFlavor } from "grammy";
 
 /**
  * Session data structure
@@ -24,9 +21,7 @@ export interface SessionData {
 /**
  * Custom context type with session and conversation support
  */
-export type MyContext = Context &
-  SessionFlavor<SessionData> &
-  ConversationFlavor;
+export type MyContext = Context & SessionFlavor<SessionData> & ConversationFlavor;
 
 /**
  * Conversation type alias

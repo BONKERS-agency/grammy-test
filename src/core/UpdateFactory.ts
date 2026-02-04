@@ -1,37 +1,37 @@
 import type {
-  Update,
-  Message,
-  User,
-  Chat,
-  MessageEntity,
-  CallbackQuery,
-  InlineQuery,
-  ChosenInlineResult,
-  PreCheckoutQuery,
-  PollAnswer,
-  ChatMemberUpdated,
-  ChatMember,
-  Poll,
-  PollOption,
-  MessageReactionUpdated,
-  ReactionType,
-  PhotoSize,
-  Document,
   Audio,
-  Video,
-  Voice,
-  VideoNote,
-  Sticker,
+  CallbackQuery,
+  Chat,
+  ChatMember,
+  ChatMemberUpdated,
+  ChosenInlineResult,
   Contact,
-  Location,
-  Venue,
-  SuccessfulPayment,
-  Invoice,
-  ForumTopicCreated,
+  Document,
   ForumTopicClosed,
+  ForumTopicCreated,
   ForumTopicReopened,
+  InlineQuery,
+  Invoice,
+  Location,
+  Message,
+  MessageEntity,
+  MessageReactionUpdated,
+  PhotoSize,
+  Poll,
+  PollAnswer,
+  PollOption,
+  PreCheckoutQuery,
+  ReactionType,
+  Sticker,
+  SuccessfulPayment,
+  Update,
+  User,
+  Venue,
+  Video,
+  VideoNote,
+  Voice,
 } from "grammy/types";
-import { parseFormattedText, type ParseMode } from "./MarkdownParser.js";
+import { type ParseMode, parseFormattedText } from "./MarkdownParser.js";
 
 /**
  * Counter state for generating unique IDs.
@@ -103,7 +103,7 @@ export class UpdateFactory {
       entities?: MessageEntity[];
       replyToMessageId?: number;
       messageThreadId?: number;
-    } = {}
+    } = {},
   ): Update {
     let finalText = text;
     let entities = options.entities;
@@ -144,7 +144,7 @@ export class UpdateFactory {
     options: {
       replyToMessageId?: number;
       messageThreadId?: number;
-    } = {}
+    } = {},
   ): Update {
     const text = args ? `${command} ${args}` : command;
     const entities: MessageEntity[] = [
@@ -186,7 +186,7 @@ export class UpdateFactory {
     options: {
       fromMessage?: Message;
       inlineMessageId?: string;
-    } = {}
+    } = {},
   ): Update {
     const callbackQuery: CallbackQuery = this.cleanObject({
       id: String(this.counters.callbackQueryId++),
@@ -215,7 +215,7 @@ export class UpdateFactory {
       offset?: string;
       chatType?: "sender" | "private" | "group" | "supergroup" | "channel";
       location?: Location;
-    } = {}
+    } = {},
   ): Update {
     const inlineQuery: InlineQuery = this.cleanObject({
       id: String(this.counters.inlineQueryId++),
@@ -242,7 +242,7 @@ export class UpdateFactory {
     options: {
       location?: Location;
       inlineMessageId?: string;
-    } = {}
+    } = {},
   ): Update {
     const chosenResult: ChosenInlineResult = this.cleanObject({
       result_id: resultId,
@@ -273,7 +273,7 @@ export class UpdateFactory {
       captionEntities?: MessageEntity[];
       replyToMessageId?: number;
       messageThreadId?: number;
-    } = {}
+    } = {},
   ): Update {
     let caption = options.caption;
     let captionEntities = options.captionEntities;
@@ -317,7 +317,7 @@ export class UpdateFactory {
       captionEntities?: MessageEntity[];
       replyToMessageId?: number;
       messageThreadId?: number;
-    } = {}
+    } = {},
   ): Update {
     let caption = options.caption;
     let captionEntities = options.captionEntities;
@@ -360,7 +360,7 @@ export class UpdateFactory {
       parseMode?: ParseMode;
       captionEntities?: MessageEntity[];
       replyToMessageId?: number;
-    } = {}
+    } = {},
   ): Update {
     let caption = options.caption;
     let captionEntities = options.captionEntities;
@@ -402,7 +402,7 @@ export class UpdateFactory {
       parseMode?: ParseMode;
       captionEntities?: MessageEntity[];
       replyToMessageId?: number;
-    } = {}
+    } = {},
   ): Update {
     let caption = options.caption;
     let captionEntities = options.captionEntities;
@@ -444,7 +444,7 @@ export class UpdateFactory {
       parseMode?: ParseMode;
       captionEntities?: MessageEntity[];
       replyToMessageId?: number;
-    } = {}
+    } = {},
   ): Update {
     const message = this.cleanObject({
       message_id: this.counters.messageId++,
@@ -474,7 +474,7 @@ export class UpdateFactory {
     videoNote: VideoNote,
     options: {
       replyToMessageId?: number;
-    } = {}
+    } = {},
   ): Update {
     const message = this.cleanObject({
       message_id: this.counters.messageId++,
@@ -502,7 +502,7 @@ export class UpdateFactory {
     sticker: Sticker,
     options: {
       replyToMessageId?: number;
-    } = {}
+    } = {},
   ): Update {
     const message = this.cleanObject({
       message_id: this.counters.messageId++,
@@ -530,7 +530,7 @@ export class UpdateFactory {
     user: User,
     chat: Chat,
     contact: Contact,
-    options: { replyToMessageId?: number } = {}
+    options: { replyToMessageId?: number } = {},
   ): Update {
     const message = this.cleanObject({
       message_id: this.counters.messageId++,
@@ -556,7 +556,7 @@ export class UpdateFactory {
     user: User,
     chat: Chat,
     location: Location,
-    options: { replyToMessageId?: number } = {}
+    options: { replyToMessageId?: number } = {},
   ): Update {
     const message = this.cleanObject({
       message_id: this.counters.messageId++,
@@ -582,7 +582,7 @@ export class UpdateFactory {
     user: User,
     chat: Chat,
     venue: Venue,
-    options: { replyToMessageId?: number } = {}
+    options: { replyToMessageId?: number } = {},
   ): Update {
     const message = this.cleanObject({
       message_id: this.counters.messageId++,
@@ -611,7 +611,7 @@ export class UpdateFactory {
     user: User,
     chat: Chat,
     poll: Poll,
-    options: { replyToMessageId?: number } = {}
+    options: { replyToMessageId?: number } = {},
   ): Update {
     const message = this.cleanObject({
       message_id: this.counters.messageId++,
@@ -660,7 +660,7 @@ export class UpdateFactory {
       allowsMultipleAnswers?: boolean;
       openPeriod?: number;
       closeDate?: number;
-    } = {}
+    } = {},
   ): Poll {
     const pollOptions: PollOption[] = options.map((text) => ({
       text,
@@ -708,7 +708,7 @@ export class UpdateFactory {
           post_code: string;
         };
       };
-    } = {}
+    } = {},
   ): Update {
     const preCheckoutQuery: PreCheckoutQuery = this.cleanObject({
       id: String(this.counters.callbackQueryId++),
@@ -729,11 +729,7 @@ export class UpdateFactory {
   /**
    * Create a successful payment message update.
    */
-  createSuccessfulPayment(
-    user: User,
-    chat: Chat,
-    payment: SuccessfulPayment
-  ): Update {
+  createSuccessfulPayment(user: User, chat: Chat, payment: SuccessfulPayment): Update {
     const message = this.cleanObject({
       message_id: this.counters.messageId++,
       date: this.timestamp(),
@@ -751,11 +747,7 @@ export class UpdateFactory {
   /**
    * Create an invoice message update.
    */
-  createInvoiceMessage(
-    user: User,
-    chat: Chat,
-    invoice: Invoice
-  ): Update {
+  createInvoiceMessage(user: User, chat: Chat, invoice: Invoice): Update {
     const message = this.cleanObject({
       message_id: this.counters.messageId++,
       date: this.timestamp(),
@@ -789,7 +781,7 @@ export class UpdateFactory {
         is_revoked: boolean;
       };
       viaChatFolderInviteLink?: boolean;
-    } = {}
+    } = {},
   ): Update {
     const chatMemberUpdated: ChatMemberUpdated = this.cleanObject({
       chat,
@@ -814,7 +806,7 @@ export class UpdateFactory {
     chat: Chat,
     from: User,
     oldMember: ChatMember,
-    newMember: ChatMember
+    newMember: ChatMember,
   ): Update {
     const chatMemberUpdated: ChatMemberUpdated = {
       chat,
@@ -840,7 +832,7 @@ export class UpdateFactory {
     messageId: number,
     user: User,
     oldReaction: ReactionType[],
-    newReaction: ReactionType[]
+    newReaction: ReactionType[],
   ): Update {
     const messageReaction: MessageReactionUpdated = {
       chat,
@@ -866,7 +858,7 @@ export class UpdateFactory {
     user: User,
     chat: Chat,
     topicCreated: ForumTopicCreated,
-    messageThreadId: number
+    messageThreadId: number,
   ): Update {
     const message = this.cleanObject({
       message_id: this.counters.messageId++,
@@ -886,11 +878,7 @@ export class UpdateFactory {
   /**
    * Create a forum topic closed message update.
    */
-  createForumTopicClosed(
-    user: User,
-    chat: Chat,
-    messageThreadId: number
-  ): Update {
+  createForumTopicClosed(user: User, chat: Chat, messageThreadId: number): Update {
     const topicClosed: ForumTopicClosed = {};
 
     const message = this.cleanObject({
@@ -911,11 +899,7 @@ export class UpdateFactory {
   /**
    * Create a forum topic reopened message update.
    */
-  createForumTopicReopened(
-    user: User,
-    chat: Chat,
-    messageThreadId: number
-  ): Update {
+  createForumTopicReopened(user: User, chat: Chat, messageThreadId: number): Update {
     const topicReopened: ForumTopicReopened = {};
 
     const message = this.cleanObject({
@@ -946,7 +930,7 @@ export class UpdateFactory {
     options: {
       parseMode?: ParseMode;
       entities?: MessageEntity[];
-    } = {}
+    } = {},
   ): Update {
     let finalText = newText;
     let entities = options.entities;
@@ -986,7 +970,7 @@ export class UpdateFactory {
       captionEntities?: MessageEntity[];
       photo?: PhotoSize[];
       document?: Document;
-    } = {}
+    } = {},
   ): Update {
     let caption = newCaption;
     let captionEntities = options.captionEntities;
@@ -1027,11 +1011,7 @@ export class UpdateFactory {
   /**
    * Create a PhotoSize array for photo messages.
    */
-  createPhotoSizes(
-    width: number,
-    height: number,
-    fileSize?: number
-  ): PhotoSize[] {
+  createPhotoSizes(width: number, height: number, fileSize?: number): PhotoSize[] {
     // Telegram typically provides multiple sizes
     const sizes: PhotoSize[] = [];
 
@@ -1072,11 +1052,7 @@ export class UpdateFactory {
   /**
    * Create a Document object.
    */
-  createDocument(
-    fileName: string,
-    mimeType: string,
-    fileSize?: number
-  ): Document {
+  createDocument(fileName: string, mimeType: string, fileSize?: number): Document {
     return this.cleanObject({
       file_id: this.generateFileId("document"),
       file_unique_id: this.generateFileId("unique"),
@@ -1110,7 +1086,7 @@ export class UpdateFactory {
       fileName?: string;
       mimeType?: string;
       fileSize?: number;
-    } = {}
+    } = {},
   ): Audio {
     return this.cleanObject({
       file_id: this.generateFileId("audio"),
@@ -1135,7 +1111,7 @@ export class UpdateFactory {
       fileName?: string;
       mimeType?: string;
       fileSize?: number;
-    } = {}
+    } = {},
   ): Video {
     return this.cleanObject({
       file_id: this.generateFileId("video"),

@@ -478,6 +478,7 @@ The framework enforces bot permissions just like real Telegram. Use `setBotAdmin
 ```typescript
 testBot.command("ban", async (ctx) => {
   const member = await ctx.getChatMember(ctx.from!.id);
+  // Note: "creator" (owner) is also an admin - they have all permissions
   if (member.status !== "administrator" && member.status !== "creator") {
     return ctx.reply("Admin only!");
   }
@@ -527,6 +528,10 @@ it("allows /ban from admin", async () => {
 // - "kicked" = banned (cannot rejoin via invite links)
 // - "left" = not a member but CAN rejoin
 // To "kick" (remove but allow rejoining): banChatMember + unbanChatMember
+
+// You can also use MemberState.isAdmin() which returns true for both administrators AND creators:
+const isAdmin = testBot.server.memberState.isAdmin(group.id, admin.id);  // true for owner
+const isOwner = testBot.server.memberState.isOwner(group.id, admin.id);  // true only for owner
 ```
 
 ### Bot Permission Reference
@@ -824,6 +829,25 @@ it("should error when banned user tries to join", async () => {
 });
 ```
 
+## String and Number IDs
+
+The framework accepts both string and number IDs for all API methods, matching real Telegram behavior:
+
+```typescript
+// Both of these work identically
+await ctx.api.sendMessage(123456, "Hello");
+await ctx.api.sendMessage("123456", "Hello");
+
+// Same for user IDs
+await ctx.api.getChatMember(chatId, 789);
+await ctx.api.getChatMember(chatId, "789");
+
+// And for combined usage
+await ctx.api.banChatMember("-100123456", "789");
+```
+
+This is useful when working with IDs from external sources (databases, environment variables, etc.) that may be stored as strings.
+
 ## Accessing Server State
 
 For advanced assertions, access the state managers directly:
@@ -836,6 +860,10 @@ expect(chatData.permissions?.can_send_messages).toBe(false);
 // Member state
 const member = testBot.server.memberState.getMember(chatId, userId);
 expect(member?.status).toBe("administrator");
+
+// Check admin status (returns true for both administrators AND owners)
+expect(testBot.server.memberState.isAdmin(chatId, userId)).toBe(true);
+expect(testBot.server.memberState.isOwner(chatId, ownerId)).toBe(true);
 
 // Poll state
 const poll = testBot.server.pollState.getPoll(pollId);
@@ -872,7 +900,329 @@ The example bot demonstrates:
 - Forum topics
 - Reactions
 - Inline queries
-- Payments
+- Payments (invoices and star transactions)
+- Bot settings (name, description)
+- Premium user features
+- Star balance tracking
+- Giveaways
+- Web app integration
+- Story handling
+- Passport data processing
+- Business connections
+- Chat boosts
+
+## Testing Premium Features
+
+```typescript
+it("handles premium users", async () => {
+  const user = testBot.createUser({ first_name: "Premium User" });
+  const chat = testBot.createChat({ type: "private" });
+
+  // Mark user as premium
+  testBot.server.memberState.setPremium(user.id, true);
+
+  expect(testBot.server.memberState.isPremium(user.id)).toBe(true);
+});
+```
+
+## Testing Chat Boosts
+
+```typescript
+it("handles chat boosts", async () => {
+  const user = testBot.createUser({ first_name: "Booster" });
+  const channel = testBot.createChat({ type: "channel", title: "Test Channel" });
+
+  // Simulate a boost (source: "premium", "gift_code", or "giveaway")
+  const update = testBot.server.simulateChatBoost(channel, user, "premium");
+
+  expect(update.chat_boost).toBeDefined();
+
+  // Check boost count
+  const boostCount = testBot.server.chatState.getBoostCount(channel.id);
+  expect(boostCount).toBe(1);
+});
+
+it("handles removed chat boost", async () => {
+  const user = testBot.createUser({ first_name: "Booster" });
+  const channel = testBot.createChat({ type: "channel", title: "Test Channel" });
+
+  // First add a boost
+  const boostUpdate = testBot.server.simulateChatBoost(channel, user, "premium");
+  const boostId = (boostUpdate.chat_boost as any).boost.boost_id;
+
+  // Then remove it
+  const removeUpdate = testBot.server.simulateRemovedChatBoost(channel, boostId);
+
+  expect(removeUpdate.removed_chat_boost).toBeDefined();
+  expect(testBot.server.chatState.getBoostCount(channel.id)).toBe(0);
+});
+```
+
+## Testing Star Transactions
+
+```typescript
+testBot.on("message:successful_payment", async (ctx) => {
+  const payment = ctx.message.successful_payment!;
+  if (payment.invoice_payload === "premium_stars") {
+    await ctx.reply(`Thanks for ${payment.total_amount} stars!`);
+  }
+});
+
+it("handles star payments", async () => {
+  const user = testBot.createUser();
+  const chat = testBot.createChat({ type: "private" });
+
+  // Create a star transaction
+  const transaction = testBot.server.paymentState.createTransaction(
+    user.id,
+    100,
+    { source: { type: "user", user } }
+  );
+
+  // Simulate successful payment
+  const response = await testBot.simulateSuccessfulPayment(user, chat, {
+    currency: "XTR",
+    total_amount: 100,
+    invoice_payload: "premium_stars",
+    telegram_payment_charge_id: transaction.id,
+    provider_payment_charge_id: "provider_123",
+  });
+
+  expect(response.text).toContain("100 stars");
+});
+```
+
+## Testing Giveaways
+
+```typescript
+it("simulates giveaway", async () => {
+  const channel = testBot.createChat({ type: "channel", title: "Test Channel" });
+
+  const update = testBot.server.simulateGiveaway(channel, {
+    winnerCount: 5,
+    prizeDescription: "Premium subscription",
+  });
+
+  expect((update.message as any).giveaway).toBeDefined();
+  expect((update.message as any).giveaway.winner_count).toBe(5);
+});
+
+it("simulates giveaway completion", async () => {
+  const channel = testBot.createChat({ type: "channel", title: "Channel" });
+  const winner = testBot.createUser({ first_name: "Winner" });
+
+  const giveawayUpdate = testBot.server.simulateGiveaway(channel);
+  const giveawayMessageId = giveawayUpdate.message!.message_id;
+
+  const completionUpdate = testBot.server.simulateGiveawayCompleted(
+    channel,
+    giveawayMessageId,
+    [winner]
+  );
+
+  expect((completionUpdate.message as any).giveaway_completed.winner_count).toBe(1);
+});
+```
+
+## Testing Telegram Passport
+
+```typescript
+testBot.command("reject", async (ctx) => {
+  await ctx.api.setPassportDataErrors(ctx.from!.id, [
+    {
+      source: "data",
+      type: "personal_details",
+      field_name: "first_name",
+      data_hash: "abc123",
+      message: "Name contains invalid characters",
+    },
+  ]);
+  await ctx.reply("Errors set");
+});
+
+it("handles passport data", async () => {
+  const user = testBot.createUser();
+  const chat = testBot.createChat({ type: "private" });
+
+  // Simulate passport data submission
+  const update = testBot.server.simulatePassportData(user, chat, {
+    personal_details: { first_name: "John", last_name: "Doe" },
+  });
+
+  expect((update.message as any).passport_data).toBeDefined();
+
+  // Set errors on passport data
+  const response = await testBot.sendCommand(user, chat, "/reject");
+  expect(response.text).toBe("Errors set");
+
+  // Check errors stored
+  const errors = testBot.server.passportState.getPassportDataErrors(user.id);
+  expect(errors).toHaveLength(1);
+});
+```
+
+## Testing Business Features
+
+```typescript
+it("handles business connection", async () => {
+  const user = testBot.createUser({ first_name: "Business User" });
+  const chat = testBot.createChat({ type: "private" });
+
+  // Set up business connection
+  const connection = testBot.server.businessState.createConnection(user, chat.id, {
+    canReply: true,
+    isEnabled: true,
+  });
+
+  // Simulate business message (params: user, chat, text, connectionId)
+  const update = testBot.server.simulateBusinessMessage(user, chat, "Hello", connection.id);
+
+  expect(update.business_message).toBeDefined();
+  expect((update.business_message as any).business_connection_id).toBe(connection.id);
+});
+
+it("tracks business messages", async () => {
+  const user = testBot.createUser({ first_name: "Business User" });
+  const chat = testBot.createChat({ type: "private" });
+
+  const connection = testBot.server.businessState.createConnection(user, chat.id);
+  testBot.server.simulateBusinessMessage(user, chat, "First message", connection.id);
+  testBot.server.simulateBusinessMessage(user, chat, "Second message", connection.id);
+
+  const messages = testBot.server.businessState.getBusinessMessages(connection.id);
+  expect(messages).toHaveLength(2);
+});
+```
+
+## Testing Web App Data
+
+```typescript
+testBot.on("message", async (ctx) => {
+  if ((ctx.msg as any).web_app_data) {
+    const data = JSON.parse((ctx.msg as any).web_app_data.data);
+    await ctx.reply(`Received: ${data.item}`);
+  }
+});
+
+it("handles web app data", async () => {
+  const user = testBot.createUser();
+  const chat = testBot.createChat({ type: "private" });
+
+  // simulateWebAppData params: user, chat, buttonText, data
+  const update = testBot.server.simulateWebAppData(
+    user,
+    chat,
+    "Submit Order",
+    JSON.stringify({ item: "Pizza" })
+  );
+
+  await testBot.handleUpdate(update);
+
+  // Bot should have replied with the data
+  const messages = testBot.server.getAllMessages(chat.id);
+  const botResponse = messages.find(m => m.text?.includes("Received: Pizza"));
+  expect(botResponse).toBeDefined();
+});
+```
+
+## Testing Stories
+
+```typescript
+testBot.on("message", async (ctx) => {
+  if ((ctx.msg as any).story) {
+    await ctx.reply("Nice story!");
+  }
+});
+
+it("handles story messages", async () => {
+  const user = testBot.createUser();
+  const chat = testBot.createChat({ type: "private" });
+  const storyChat = testBot.createChat({ type: "channel", title: "News Channel" });
+
+  const update = testBot.server.simulateStoryMessage(user, chat, 123, storyChat);
+
+  expect((update.message as any).story.id).toBe(123);
+});
+```
+
+## Testing Input Validation
+
+The framework validates input like real Telegram. Test that your bot handles validation errors correctly:
+
+```typescript
+import { BotError } from "grammy";
+
+it("rejects messages over 4096 characters", async () => {
+  testBot.command("long", async (ctx) => {
+    await ctx.reply("A".repeat(4097));  // Over limit
+  });
+
+  const user = testBot.createUser();
+  const chat = testBot.createChat({ type: "private" });
+
+  await expect(testBot.sendCommand(user, chat, "/long")).rejects.toThrow(
+    /message is too long/
+  );
+});
+
+it("rejects captions over 1024 characters", async () => {
+  testBot.command("photo", async (ctx) => {
+    await ctx.replyWithPhoto("https://example.com/img.jpg", {
+      caption: "A".repeat(1025),  // Over limit
+    });
+  });
+
+  const user = testBot.createUser();
+  const chat = testBot.createChat({ type: "private" });
+
+  await expect(testBot.sendCommand(user, chat, "/photo")).rejects.toThrow(
+    /caption is too long/
+  );
+});
+
+it("rejects polls with invalid option count", async () => {
+  testBot.command("poll", async (ctx) => {
+    await ctx.replyWithPoll("Question?", ["Only one option"]);  // Need 2-10
+  });
+
+  const user = testBot.createUser();
+  const chat = testBot.createChat({ type: "private" });
+
+  await expect(testBot.sendCommand(user, chat, "/poll")).rejects.toThrow(
+    /POLL_OPTIONS_COUNT_INVALID/
+  );
+});
+
+it("rejects quiz without correct_option_id", async () => {
+  testBot.command("quiz", async (ctx) => {
+    await ctx.replyWithPoll("Question?", ["A", "B"], {
+      type: "quiz",
+      // Missing correct_option_id
+    });
+  });
+
+  const user = testBot.createUser();
+  const chat = testBot.createChat({ type: "private" });
+
+  await expect(testBot.sendCommand(user, chat, "/quiz")).rejects.toThrow(
+    /QUIZ_CORRECT_OPTION_REQUIRED/
+  );
+});
+```
+
+### Validation Reference
+
+| Validation | Limit | Error Pattern |
+|------------|-------|---------------|
+| Message text | 4096 chars | `message is too long` |
+| Caption | 1024 chars | `caption is too long` |
+| Photo size | 10 MB | `file is too big` |
+| Doc/audio/video | 50 MB | `file is too big` |
+| Poll question | 300 chars | `POLL_QUESTION_TOO_LONG` |
+| Poll option | 1-100 chars | `POLL_OPTION_EMPTY` / `POLL_OPTION_TOO_LONG` |
+| Poll options | 2-10 | `POLL_OPTIONS_COUNT_INVALID` |
+| Poll explanation | 200 chars | `POLL_EXPLANATION_TOO_LONG` |
+| Quiz correct_option_id | Required, valid index | `QUIZ_CORRECT_OPTION_REQUIRED` / `QUIZ_CORRECT_OPTION_INVALID` |
 
 ## Development
 
@@ -880,4 +1230,17 @@ The example bot demonstrates:
 npm install
 npm run build
 npm test
+npm run lint      # Check code with Biome
+npm run lint:fix  # Auto-fix lint issues
+npm run format    # Format code with Biome
 ```
+
+### Code Quality
+
+The project uses [Biome](https://biomejs.dev/) for linting and formatting with strict rules enabled:
+- No explicit `any` types
+- No non-null assertions (`!`)
+- Consistent import organization
+- All recommended lint rules enabled
+
+Run `npm run lint` before committing to ensure code quality.

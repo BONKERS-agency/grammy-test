@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { TestBot } from "../src/index.js";
 
 describe("Concurrent Interactions", () => {
@@ -21,7 +21,7 @@ describe("Concurrent Interactions", () => {
           reply_markup: {
             inline_keyboard: [[{ text: "Vote A", callback_data: "vote_a" }]],
           },
-        })
+        }),
       );
 
       testBot.callbackQuery("vote_a", async (ctx) => {
@@ -64,7 +64,7 @@ describe("Concurrent Interactions", () => {
           reply_markup: {
             inline_keyboard: [[{ text: "Click", callback_data: "click" }]],
           },
-        })
+        }),
       );
 
       testBot.callbackQuery("click", async (ctx) => {
@@ -104,19 +104,23 @@ describe("Concurrent Interactions", () => {
               ],
             ],
           },
-        })
+        }),
       );
 
       testBot.callbackQuery(/^pick_/, async (ctx) => {
-        const choice = ctx.callbackQuery.data!.split("_")[1] as "a" | "b" | "c";
+        const choice = (ctx.callbackQuery.data ?? "").split("_")[1] as "a" | "b" | "c";
         votes[choice]++;
         await ctx.answerCallbackQuery(`Voted for ${choice.toUpperCase()}`);
       });
 
-      const users = Array.from({ length: 9 }, (_, i) => testBot.createUser({ first_name: `User${i}` }));
+      const users = Array.from({ length: 9 }, (_, i) =>
+        testBot.createUser({ first_name: `User${i}` }),
+      );
 
       const chat = testBot.createChat({ type: "group", title: "Test" });
-      users.forEach((u) => testBot.setMember(chat, u));
+      for (const u of users) {
+        testBot.setMember(chat, u);
+      }
 
       const pollMsg = await testBot.sendCommand(users[0], chat, "/poll");
       const message = pollMsg.messages[0];
@@ -145,10 +149,14 @@ describe("Concurrent Interactions", () => {
         await ctx.reply("Got it");
       });
 
-      const users = Array.from({ length: 5 }, (_, i) => testBot.createUser({ first_name: `User${i}` }));
+      const users = Array.from({ length: 5 }, (_, i) =>
+        testBot.createUser({ first_name: `User${i}` }),
+      );
 
       const chat = testBot.createChat({ type: "group", title: "Test" });
-      users.forEach((u) => testBot.setMember(chat, u));
+      for (const u of users) {
+        testBot.setMember(chat, u);
+      }
 
       // All users send messages concurrently
       await Promise.all(users.map((u, i) => testBot.sendMessage(u, chat, `Message ${i}`)));
@@ -170,10 +178,14 @@ describe("Concurrent Interactions", () => {
       });
 
       const user = testBot.createUser({ first_name: "User" });
-      const chats = Array.from({ length: 3 }, (_, i) => testBot.createChat({ type: "private", id: 100 + i }));
+      const chats = Array.from({ length: 3 }, (_, i) =>
+        testBot.createChat({ type: "private", id: 100 + i }),
+      );
 
       // Send to all chats concurrently
-      await Promise.all(chats.map((chat, i) => testBot.sendMessage(user, chat, `Chat ${i} message`)));
+      await Promise.all(
+        chats.map((chat, i) => testBot.sendMessage(user, chat, `Chat ${i} message`)),
+      );
 
       expect(chatMessages.size).toBe(3);
       chats.forEach((chat, i) => {
@@ -195,7 +207,13 @@ describe("Concurrent Interactions", () => {
       const botMessages = testBot.server.getBotMessages(chat.id);
       const texts = botMessages.map((m) => (m as { text?: string }).text);
 
-      expect(texts).toEqual(["Echo: Msg 0", "Echo: Msg 1", "Echo: Msg 2", "Echo: Msg 3", "Echo: Msg 4"]);
+      expect(texts).toEqual([
+        "Echo: Msg 0",
+        "Echo: Msg 1",
+        "Echo: Msg 2",
+        "Echo: Msg 3",
+        "Echo: Msg 4",
+      ]);
     });
   });
 
@@ -204,26 +222,31 @@ describe("Concurrent Interactions", () => {
       const user = testBot.createUser({ first_name: "Creator" });
       const chat = testBot.createChat({ type: "group", title: "Test" });
 
-      testBot.command("poll", (ctx) => ctx.replyWithPoll("Favorite?", ["Apple", "Banana", "Cherry"]));
+      testBot.command("poll", (ctx) =>
+        ctx.replyWithPoll("Favorite?", ["Apple", "Banana", "Cherry"]),
+      );
 
       const pollResponse = await testBot.sendCommand(user, chat, "/poll");
-      const poll = pollResponse.poll!;
+      const poll = pollResponse.poll;
+      expect(poll).toBeDefined();
 
-      const voters = Array.from({ length: 10 }, (_, i) => testBot.createUser({ first_name: `Voter${i}` }));
+      const voters = Array.from({ length: 10 }, (_, i) =>
+        testBot.createUser({ first_name: `Voter${i}` }),
+      );
 
       // All voters vote concurrently
       await Promise.all(
         voters.map((voter, i) => {
           const optionIndex = i % 3; // Distribute votes across options
           return testBot.vote(voter, poll, [optionIndex]);
-        })
+        }),
       );
 
       const storedPoll = testBot.server.pollState.getPoll(poll.id);
       expect(storedPoll?.total_voter_count).toBe(10);
 
       // Verify vote distribution
-      const totalVotes = storedPoll!.options.reduce((sum, opt) => sum + opt.voter_count, 0);
+      const totalVotes = storedPoll?.options.reduce((sum, opt) => sum + opt.voter_count, 0) ?? 0;
       expect(totalVotes).toBe(10);
     });
 
@@ -235,7 +258,8 @@ describe("Concurrent Interactions", () => {
       testBot.command("poll", (ctx) => ctx.replyWithPoll("Pick one:", ["A", "B"]));
 
       const pollResponse = await testBot.sendCommand(user, chat, "/poll");
-      const poll = pollResponse.poll!;
+      const poll = pollResponse.poll;
+      expect(poll).toBeDefined();
 
       // Vote for first option
       await testBot.vote(voter, poll, [0]);
@@ -271,7 +295,9 @@ describe("Concurrent Interactions", () => {
       const postResponse = await testBot.sendCommand(poster, chat, "/post");
       const message = postResponse.messages[0];
 
-      const reactors = Array.from({ length: 5 }, (_, i) => testBot.createUser({ first_name: `Reactor${i}` }));
+      const reactors = Array.from({ length: 5 }, (_, i) =>
+        testBot.createUser({ first_name: `Reactor${i}` }),
+      );
 
       // All react sequentially (concurrent reactions may mix up responses)
       for (const reactor of reactors) {
@@ -325,8 +351,8 @@ describe("Concurrent Interactions", () => {
           targets.map((target) =>
             ctx.restrictChatMember(target.id, {
               permissions: { can_send_messages: false },
-            })
-          )
+            }),
+          ),
         );
         await ctx.reply("All muted");
       });
@@ -358,8 +384,8 @@ describe("Concurrent Interactions", () => {
         users.map((user) =>
           testBot.server.memberState.setAdmin(group.id, user, {
             can_delete_messages: true,
-          })
-        )
+          }),
+        ),
       );
 
       // All should be admins
@@ -386,7 +412,9 @@ describe("Concurrent Interactions", () => {
         ]);
       });
 
-      const users = Array.from({ length: 5 }, (_, i) => testBot.createUser({ first_name: `User${i}` }));
+      const users = Array.from({ length: 5 }, (_, i) =>
+        testBot.createUser({ first_name: `User${i}` }),
+      );
 
       // Send queries sequentially to ensure proper tracking
       for (let i = 0; i < users.length; i++) {
@@ -408,7 +436,9 @@ describe("Concurrent Interactions", () => {
         await ctx.answerPreCheckoutQuery(true);
       });
 
-      const users = Array.from({ length: 3 }, (_, i) => testBot.createUser({ first_name: `Buyer${i}` }));
+      const users = Array.from({ length: 3 }, (_, i) =>
+        testBot.createUser({ first_name: `Buyer${i}` }),
+      );
 
       // All send pre-checkout concurrently
       await Promise.all(
@@ -418,8 +448,8 @@ describe("Concurrent Interactions", () => {
             currency: "USD",
             total_amount: 1000,
             invoice_payload: "item",
-          })
-        )
+          }),
+        ),
       );
 
       expect(processedCheckouts).toHaveLength(3);
@@ -482,10 +512,14 @@ describe("Concurrent Interactions", () => {
         return ctx.reply(`Got photo from ${ctx.from.first_name}`);
       });
 
-      const users = Array.from({ length: 5 }, (_, i) => testBot.createUser({ first_name: `User${i}` }));
+      const users = Array.from({ length: 5 }, (_, i) =>
+        testBot.createUser({ first_name: `User${i}` }),
+      );
 
       const chat = testBot.createChat({ type: "group", title: "Test" });
-      users.forEach((u) => testBot.setMember(chat, u));
+      for (const u of users) {
+        testBot.setMember(chat, u);
+      }
 
       // Upload photos sequentially
       for (const user of users) {
@@ -507,8 +541,8 @@ describe("Concurrent Interactions", () => {
       // Create multiple links concurrently
       const links = await Promise.all(
         Array.from({ length: 5 }, (_, i) =>
-          testBot.server.chatState.createInviteLink(group.id, admin, { name: `Link${i}` })
-        )
+          testBot.server.chatState.createInviteLink(group.id, admin, { name: `Link${i}` }),
+        ),
       );
 
       // All links should be unique
@@ -529,7 +563,9 @@ describe("Concurrent Interactions", () => {
 
       // Create multiple topics concurrently
       const topics = await Promise.all(
-        Array.from({ length: 5 }, (_, i) => testBot.server.chatState.createForumTopic(forum.id, `Topic ${i}`))
+        Array.from({ length: 5 }, (_, i) =>
+          testBot.server.chatState.createForumTopic(forum.id, `Topic ${i}`),
+        ),
       );
 
       // All topics should be created with unique IDs
@@ -569,7 +605,7 @@ describe("Concurrent Interactions", () => {
           reply_markup: {
             inline_keyboard: [[{ text: "Click", callback_data: "btn" }]],
           },
-        })
+        }),
       );
 
       const menuResponse = await testBot.sendCommand(user, chat, "/menu");

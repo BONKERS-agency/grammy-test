@@ -1,9 +1,17 @@
-import type { PhotoSize, Document, Audio, Video, Voice, VideoNote, Sticker, File } from "grammy/types";
+import type { Audio, Document, File, PhotoSize, Video, VideoNote, Voice } from "grammy/types";
 
 /**
  * Type of stored file.
  */
-export type FileType = "photo" | "document" | "audio" | "video" | "voice" | "video_note" | "sticker" | "animation";
+export type FileType =
+  | "photo"
+  | "document"
+  | "audio"
+  | "video"
+  | "voice"
+  | "video_note"
+  | "sticker"
+  | "animation";
 
 /**
  * Stored file data.
@@ -88,7 +96,7 @@ export class FileState {
       duration?: number;
       thumbnail?: PhotoSize;
       metadata?: Record<string, unknown>;
-    } = {}
+    } = {},
   ): StoredFile {
     const fileId = options.fileId ?? this.generateFileId(type);
     const fileUniqueId = options.fileUniqueId ?? this.generateFileUniqueId();
@@ -125,7 +133,7 @@ export class FileState {
     options: {
       content?: Buffer | Uint8Array;
       fileSize?: number;
-    } = {}
+    } = {},
   ): PhotoSize[] {
     const sizes: PhotoSize[] = [];
     const baseFileId = this.generateFileId("photo");
@@ -139,7 +147,9 @@ export class FileState {
       fileId: `${baseFileId}_thumb`,
       width: thumbWidth,
       height: thumbHeight,
-      fileSize: options.fileSize ? Math.round(options.fileSize * thumbScale * thumbScale) : undefined,
+      fileSize: options.fileSize
+        ? Math.round(options.fileSize * thumbScale * thumbScale)
+        : undefined,
     });
 
     sizes.push({
@@ -182,7 +192,9 @@ export class FileState {
         fileId: `${baseFileId}_large`,
         width: largeWidth,
         height: largeHeight,
-        fileSize: options.fileSize ? Math.round(options.fileSize * largeScale * largeScale) : undefined,
+        fileSize: options.fileSize
+          ? Math.round(options.fileSize * largeScale * largeScale)
+          : undefined,
       });
 
       sizes.push({
@@ -224,7 +236,7 @@ export class FileState {
       content?: Buffer | Uint8Array;
       fileSize?: number;
       thumbnail?: PhotoSize;
-    } = {}
+    } = {},
   ): Document {
     const file = this.storeFile("document", {
       fileName,
@@ -255,7 +267,7 @@ export class FileState {
       content?: Buffer | Uint8Array;
       fileSize?: number;
       thumbnail?: PhotoSize;
-    } = {}
+    } = {},
   ): Audio {
     const file = this.storeFile("audio", {
       duration,
@@ -293,7 +305,7 @@ export class FileState {
       content?: Buffer | Uint8Array;
       fileSize?: number;
       thumbnail?: PhotoSize;
-    } = {}
+    } = {},
   ): Video {
     const file = this.storeFile("video", {
       width,
@@ -328,7 +340,7 @@ export class FileState {
       mimeType?: string;
       content?: Buffer | Uint8Array;
       fileSize?: number;
-    } = {}
+    } = {},
   ): Voice {
     const file = this.storeFile("voice", {
       duration,
@@ -356,7 +368,7 @@ export class FileState {
       content?: Buffer | Uint8Array;
       fileSize?: number;
       thumbnail?: PhotoSize;
-    } = {}
+    } = {},
   ): VideoNote {
     const file = this.storeFile("video_note", {
       width: length,

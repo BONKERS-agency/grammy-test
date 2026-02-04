@@ -19,10 +19,14 @@ src/
     BotResponse.ts         # Rich response object returned by simulations
     UpdateFactory.ts       # Creates realistic Telegram Updates
     MarkdownParser.ts      # Parses Markdown/HTML to message entities
-    ChatState.ts           # Chat permissions, slow mode, invite links
-    MemberState.ts         # Member status, restrictions, admin permissions
+    ChatState.ts           # Chat permissions, slow mode, invite links, boosts
+    MemberState.ts         # Member status, restrictions, admin permissions, profile photos, premium
     PollState.ts           # Poll tracking, votes, quiz mode
     FileState.ts           # File storage with file_id mapping
+    StickerState.ts        # Sticker sets and custom emoji tracking
+    BusinessState.ts       # Business connections and messages
+    PaymentState.ts        # Stars transactions and refunds
+    PassportState.ts       # Telegram Passport data and errors
     ConversationTester.ts  # Helper for testing multi-step conversations
 
   types/
@@ -54,7 +58,18 @@ test/
   concurrent.test.ts       # Multiple users and parallel operations
   integration.test.ts      # End-to-end scenarios
   full-featured-bot.test.ts # Comprehensive example bot tests
-                           # Total: 350+ tests
+  validation.test.ts       # Input validation (message length, file size, etc.)
+  bot-settings.test.ts     # Bot name, description, admin rights
+  profile-photos.test.ts   # User profile photo management
+  boosts.test.ts           # Chat boost simulation
+  webapp.test.ts           # Web app data handling
+  business.test.ts         # Business connections and messages
+  premium.test.ts          # Premium user features
+  stars.test.ts            # Star transactions and refunds
+  giveaway.test.ts         # Giveaway simulation
+  passport.test.ts         # Telegram Passport data
+  stories.test.ts          # Story message handling
+                           # Total: 505 tests
 ```
 
 ## Core Components
@@ -66,6 +81,7 @@ Simulates Telegram's backend servers:
 - Maintains state via dedicated state managers (ChatState, MemberState, PollState, FileState)
 - Validates API requests with realistic error responses
 - **Enforces bot permissions** like real Telegram (ban requires `can_restrict_members`, etc.)
+- **Accepts string or number IDs** for chat_id, user_id, message_id, etc. (like real Telegram API)
 - Returns properly structured responses matching Telegram's API
 - Supports 50+ API methods including admin, payments, forums, and more
 
@@ -96,14 +112,26 @@ Use `testBot.setBotAdmin(chat, permissions)` to grant the bot admin rights in te
 **MemberState** tracks member status. Note the Telegram API terminology:
 - `"kicked"` status = user is **banned** (removed and cannot rejoin)
 - `"left"` status = user left or was kicked-then-unbanned (CAN rejoin)
+- `"creator"` status = chat owner (recognized as admin by `isAdmin()` method)
+- `"administrator"` status = admin with specific permissions
 
 A "kick" (remove but allow rejoining) requires `banChatMember` + `unbanChatMember`.
 
-**ChatState** tracks chat settings (slow mode, permissions, invite links).
+The `isAdmin()` method returns `true` for both administrators AND creators (owners), since owners have all admin rights.
+
+**ChatState** tracks chat settings (slow mode, permissions, invite links, boosts).
 
 **PollState** tracks poll options, votes, and closed status.
 
 **FileState** stores uploaded files with file_id mapping.
+
+**StickerState** tracks sticker sets and custom emoji stickers.
+
+**BusinessState** manages business connections and business messages.
+
+**PaymentState** tracks star transactions, balances, and refunds.
+
+**PassportState** stores Telegram Passport data and errors per user.
 
 ### BotResponse
 
@@ -218,3 +246,60 @@ simulateInlineQuery(user: User, query: string): Update {
   // Create properly structured Update
 }
 ```
+
+### Available Simulation Methods
+
+The `TelegramServer` class provides these simulation methods:
+
+| Method | Description |
+|--------|-------------|
+| `simulateChatBoost(chat, user, source)` | Simulate a user boosting a chat |
+| `simulateRemovedChatBoost(chat, boostId)` | Simulate a boost being removed |
+| `simulateWebAppData(user, chat, buttonText, data)` | Simulate web app form submission |
+| `simulateBusinessConnection(user, chatId, options)` | Simulate business connection update |
+| `simulateBusinessMessage(user, chat, text, connectionId)` | Simulate message via business connection |
+| `simulatePassportData(user, chat, data, options)` | Simulate Telegram Passport submission |
+| `simulateGiveaway(chat, options)` | Simulate giveaway creation |
+| `simulateGiveawayCompleted(chat, messageId, winners, options)` | Simulate giveaway completion |
+| `simulateGiveawayWinners(chat, messageId, winners, options)` | Simulate winner announcement |
+| `simulateStoryMessage(user, chat, storyId, storyChat)` | Simulate forwarded story |
+
+### State Manager APIs
+
+Each state manager exposes methods for both simulation and assertion:
+
+**ChatState:**
+- `getOrCreate(chat)`, `setChatPermissions(chatId, permissions)`
+- `createInviteLink(chatId, creator, options)`, `getInviteLinks(chatId)`
+- `createTopic(chatId, name, iconColor)`, `closeTopic(chatId, topicId)`
+- `addBoost(chatId, source)`, `removeBoost(chatId, boostId)`, `getBoostCount(chatId)`
+- `getMessage(chatId, messageId)`, `getAllMessages(chatId)`
+
+**MemberState:**
+- `setMember(chatId, user, status)`, `getMember(chatId, userId)`
+- `isAdmin(chatId, userId)`, `isOwner(chatId, userId)`
+- `ban(chatId, userId)`, `unban(chatId, userId)`, `restrict(chatId, userId, permissions)`
+- `setPremium(userId, isPremium)`, `isPremium(userId)`
+- `addProfilePhoto(userId)`, `getProfilePhotos(userId)`
+
+**PollState:**
+- `createPoll(...)`, `getPoll(pollId)`, `vote(pollId, optionIds)`, `closePoll(pollId)`
+
+**FileState:**
+- `storeFile(type, metadata)`, `getFile(fileId)`, `getDownloadUrl(fileId)`
+
+**StickerState:**
+- `createStickerSet(name, title, type, stickers)`, `getStickerSet(name)`
+- `getCustomEmojiStickers(customEmojiIds)`
+
+**BusinessState:**
+- `createConnection(user, chatId, options)`, `getConnection(connectionId)`
+- `trackBusinessMessage(connectionId, messageId, chatId)`
+
+**PaymentState:**
+- `createTransaction(userId, amount, options)`, `getStarTransactions(userId)`
+- `refundStarPayment(userId, chargeId)`, `getStarBalance(userId)`
+
+**PassportState:**
+- `setPassportData(userId, data)`, `getPassportData(userId)`
+- `setPassportDataErrors(userId, errors)`, `getPassportDataErrors(userId)`

@@ -22,25 +22,19 @@ export class FetchInterceptor {
 
   install(): void {
     if (this.isInstalled) return;
-
-    const self = this;
-    globalThis.fetch = async function (
+    globalThis.fetch = async (
       input: string | URL | Request,
-      init?: RequestInit
-    ): Promise<Response> {
-      const url = typeof input === "string"
-        ? input
-        : input instanceof URL
-          ? input.href
-          : input.url;
+      init?: RequestInit,
+    ): Promise<Response> => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
 
       // Check if this is a Telegram API call
       if (url.includes("api.telegram.org")) {
-        return self.handleTelegramRequest(url, init);
+        return this.handleTelegramRequest(url, init);
       }
 
       // Pass through non-Telegram requests
-      return self.originalFetch(input, init);
+      return this.originalFetch(input, init);
     };
 
     this.isInstalled = true;
@@ -52,18 +46,15 @@ export class FetchInterceptor {
     this.isInstalled = false;
   }
 
-  private async handleTelegramRequest(
-    url: string,
-    init?: RequestInit
-  ): Promise<Response> {
+  private async handleTelegramRequest(url: string, init?: RequestInit): Promise<Response> {
     // Extract method name from URL
     // URL format: https://api.telegram.org/bot<token>/<method>
     const methodMatch = url.match(/\/bot[^/]+\/(\w+)/);
     if (!methodMatch) {
-      return new Response(
-        JSON.stringify({ ok: false, description: "Invalid API URL" }),
-        { status: 400, headers: { "Content-Type": "application/json" } }
-      );
+      return new Response(JSON.stringify({ ok: false, description: "Invalid API URL" }), {
+        status: 400,
+        headers: { "Content-Type": "application/json" },
+      });
     }
 
     const method = methodMatch[1];
@@ -113,10 +104,10 @@ export class FetchInterceptor {
       record.response = result;
       this.apiCalls.push(record);
 
-      return new Response(
-        JSON.stringify({ ok: true, result }),
-        { status: 200, headers: { "Content-Type": "application/json" } }
-      );
+      return new Response(JSON.stringify({ ok: true, result }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
     } catch (error) {
       const err = error as Error & { code?: number; description?: string };
       record.error = err;
@@ -128,7 +119,7 @@ export class FetchInterceptor {
           error_code: err.code ?? 400,
           description: err.description ?? err.message,
         }),
-        { status: 200, headers: { "Content-Type": "application/json" } }
+        { status: 200, headers: { "Content-Type": "application/json" } },
       );
     }
   }

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { TestBot } from "../src/index.js";
 
 describe("Message Reactions", () => {
@@ -18,7 +18,7 @@ describe("Message Reactions", () => {
 
       testBot.on("message_reaction", (ctx) => {
         reactionReceived = true;
-        const newReactions = ctx.messageReaction!.new_reaction;
+        const newReactions = ctx.messageReaction.new_reaction;
         expect(newReactions).toHaveLength(1);
         expect(newReactions[0].type).toBe("emoji");
       });
@@ -31,7 +31,9 @@ describe("Message Reactions", () => {
       const msgResponse = await testBot.sendMessage(user, chat, "Hello");
 
       // Then react to it
-      await testBot.react(user, chat, msgResponse.messages[0].message_id, [{ type: "emoji", emoji: "👍" }]);
+      await testBot.react(user, chat, msgResponse.messages[0].message_id, [
+        { type: "emoji", emoji: "👍" },
+      ]);
 
       expect(reactionReceived).toBe(true);
     });
@@ -40,7 +42,7 @@ describe("Message Reactions", () => {
       let reactionsCount = 0;
 
       testBot.on("message_reaction", (ctx) => {
-        reactionsCount = ctx.messageReaction!.new_reaction.length;
+        reactionsCount = ctx.messageReaction.new_reaction.length;
       });
 
       const user = testBot.createUser({ first_name: "Bob" });
@@ -62,7 +64,7 @@ describe("Message Reactions", () => {
       let customEmojiId: string | undefined;
 
       testBot.on("message_reaction", (ctx) => {
-        const reaction = ctx.messageReaction!.new_reaction[0];
+        const reaction = ctx.messageReaction.new_reaction[0];
         if (reaction.type === "custom_emoji") {
           customEmojiId = reaction.custom_emoji_id;
         }
@@ -74,7 +76,9 @@ describe("Message Reactions", () => {
       testBot.on("message:text", (ctx) => ctx.reply("Message"));
       const msgResponse = await testBot.sendMessage(user, chat, "Test");
 
-      await testBot.react(user, chat, msgResponse.messages[0].message_id, [{ type: "custom_emoji", custom_emoji_id: "5368324170671202286" }]);
+      await testBot.react(user, chat, msgResponse.messages[0].message_id, [
+        { type: "custom_emoji", custom_emoji_id: "5368324170671202286" },
+      ]);
 
       expect(customEmojiId).toBe("5368324170671202286");
     });
@@ -85,9 +89,10 @@ describe("Message Reactions", () => {
       const reactionHistory: string[][] = [];
 
       testBot.on("message_reaction", (ctx) => {
-        const emojis = ctx.messageReaction!.new_reaction
-          .filter((r) => r.type === "emoji")
-          .map((r) => (r as { type: "emoji"; emoji: string }).emoji);
+        const emojis =
+          ctx.messageReaction?.new_reaction
+            .filter((r) => r.type === "emoji")
+            .map((r) => (r as { type: "emoji"; emoji: string }).emoji) ?? [];
         reactionHistory.push(emojis);
       });
 
@@ -115,7 +120,7 @@ describe("Message Reactions", () => {
       let finalReactionCount = 0;
 
       testBot.on("message_reaction", (ctx) => {
-        finalReactionCount = ctx.messageReaction!.new_reaction.length;
+        finalReactionCount = ctx.messageReaction.new_reaction.length;
       });
 
       const user = testBot.createUser({ first_name: "Eve" });
@@ -141,8 +146,8 @@ describe("Message Reactions", () => {
       let newReactions: Array<{ type: string }> = [];
 
       testBot.on("message_reaction", (ctx) => {
-        oldReactions = ctx.messageReaction!.old_reaction;
-        newReactions = ctx.messageReaction!.new_reaction;
+        oldReactions = ctx.messageReaction.old_reaction;
+        newReactions = ctx.messageReaction.new_reaction;
       });
 
       const user = testBot.createUser({ first_name: "Frank" });
@@ -167,7 +172,7 @@ describe("Message Reactions", () => {
       let reactorId: number | undefined;
 
       testBot.on("message_reaction", (ctx) => {
-        reactorId = ctx.messageReaction!.user?.id;
+        reactorId = ctx.messageReaction.user?.id;
       });
 
       const user = testBot.createUser({ first_name: "Grace", id: 12345 });
@@ -176,7 +181,9 @@ describe("Message Reactions", () => {
       testBot.on("message:text", (ctx) => ctx.reply("Message"));
       const msgResponse = await testBot.sendMessage(user, chat, "Test");
 
-      await testBot.react(user, chat, msgResponse.messages[0].message_id, [{ type: "emoji", emoji: "👍" }]);
+      await testBot.react(user, chat, msgResponse.messages[0].message_id, [
+        { type: "emoji", emoji: "👍" },
+      ]);
 
       expect(reactorId).toBe(12345);
     });
@@ -186,8 +193,8 @@ describe("Message Reactions", () => {
       let messageId: number | undefined;
 
       testBot.on("message_reaction", (ctx) => {
-        chatId = ctx.messageReaction!.chat.id;
-        messageId = ctx.messageReaction!.message_id;
+        chatId = ctx.messageReaction.chat.id;
+        messageId = ctx.messageReaction.message_id;
       });
 
       const user = testBot.createUser({ first_name: "Harry" });
@@ -211,7 +218,8 @@ describe("Message Reactions", () => {
 
       testBot.on("message_reaction_count", (ctx) => {
         countUpdateReceived = true;
-        totalCount = ctx.messageReactionCount!.reactions.reduce((sum, r) => sum + r.total_count, 0);
+        totalCount =
+          ctx.messageReactionCount?.reactions.reduce((sum, r) => sum + r.total_count, 0) ?? 0;
       });
 
       const channel = testBot.createChat({ type: "channel", title: "Test Channel" });
@@ -231,7 +239,9 @@ describe("Message Reactions", () => {
     it("should set reaction on message via API", async () => {
       testBot.command("like", async (ctx) => {
         if (ctx.message?.reply_to_message) {
-          await ctx.api.setMessageReaction(ctx.chat.id, ctx.message.reply_to_message.message_id, [{ type: "emoji", emoji: "👍" }]);
+          await ctx.api.setMessageReaction(ctx.chat.id, ctx.message.reply_to_message.message_id, [
+            { type: "emoji", emoji: "👍" },
+          ]);
           await ctx.reply("Liked!");
         }
       });
@@ -247,7 +257,8 @@ describe("Message Reactions", () => {
       });
 
       const msgResponse = await testBot.sendMessage(user, chat, "React to this");
-      const targetMessage = msgResponse.sentMessage!;
+      expect(msgResponse.sentMessage).toBeDefined();
+      const targetMessage = msgResponse.sentMessage;
 
       // Send command replying to that message
       const response = await testBot.sendCommand(user, chat, "/like", {
@@ -264,7 +275,7 @@ describe("Message Reactions", () => {
 
       testBot.on("message_reaction", (ctx) => {
         // Anonymous reactions don't include user info
-        isAnonymous = ctx.messageReaction!.user === undefined;
+        isAnonymous = ctx.messageReaction.user === undefined;
       });
 
       const group = testBot.createChat({ type: "supergroup", title: "Test Group" });
@@ -299,8 +310,10 @@ describe("Message Reactions", () => {
       let likeCount = 0;
 
       testBot.on("message_reaction", (ctx) => {
-        const reactions = ctx.messageReaction!.new_reaction;
-        const likes = reactions.filter((r) => r.type === "emoji" && (r as { type: "emoji"; emoji: string }).emoji === "👍");
+        const reactions = ctx.messageReaction.new_reaction;
+        const likes = reactions.filter(
+          (r) => r.type === "emoji" && (r as { type: "emoji"; emoji: string }).emoji === "👍",
+        );
         likeCount = likes.length;
       });
 
@@ -323,7 +336,7 @@ describe("Message Reactions", () => {
     it("should handle reaction to bot's message", async () => {
       let reactionToBot = false;
 
-      testBot.on("message_reaction", (ctx) => {
+      testBot.on("message_reaction", (_ctx) => {
         // Check if reaction is to a bot's message
         reactionToBot = true;
       });
@@ -347,11 +360,13 @@ describe("Message Reactions", () => {
 
     it("should respond to specific reaction", async () => {
       testBot.on("message_reaction", async (ctx) => {
-        const reactions = ctx.messageReaction!.new_reaction;
-        const hasHeart = reactions.some((r) => r.type === "emoji" && (r as { type: "emoji"; emoji: string }).emoji === "❤️");
+        const reactions = ctx.messageReaction.new_reaction;
+        const hasHeart = reactions.some(
+          (r) => r.type === "emoji" && (r as { type: "emoji"; emoji: string }).emoji === "❤️",
+        );
 
         if (hasHeart) {
-          await ctx.api.sendMessage(ctx.messageReaction!.chat.id, "Thanks for the love!");
+          await ctx.api.sendMessage(ctx.messageReaction.chat.id, "Thanks for the love!");
         }
       });
 
@@ -364,7 +379,9 @@ describe("Message Reactions", () => {
 
       const botResponse = await testBot.sendCommand(user, chat, "/post");
 
-      await testBot.react(user, chat, botResponse.messages[0].message_id, [{ type: "emoji", emoji: "❤️" }]);
+      await testBot.react(user, chat, botResponse.messages[0].message_id, [
+        { type: "emoji", emoji: "❤️" },
+      ]);
 
       // Check that the thank you message was sent
       const apiCalls = testBot.getApiCalls();

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { TestBot } from "../src/index.js";
 
 describe("TestBot", () => {
@@ -105,6 +105,85 @@ describe("TestBot", () => {
     });
   });
 
+  describe("string IDs", () => {
+    it("should accept string chat_id in API calls", async () => {
+      testBot.command("test", async (ctx) => {
+        // Use raw API call with string chat_id
+        await ctx.api.sendMessage(String(ctx.chat.id), "String ID works!");
+      });
+
+      const user = testBot.createUser({ first_name: "Test" });
+      const chat = testBot.createChat({ type: "private" });
+
+      const response = await testBot.sendCommand(user, chat, "/test");
+
+      expect(response.text).toBe("String ID works!");
+    });
+
+    it("should accept string user_id in getChatMember", async () => {
+      const user = testBot.createUser({ first_name: "Test" });
+      const group = testBot.createChat({ type: "supergroup", title: "Test Group" });
+
+      testBot.setMember(group, user);
+
+      testBot.command("check", async (ctx) => {
+        // Use raw API call with string user_id
+        const member = await ctx.api.getChatMember(ctx.chat.id, String(ctx.from?.id ?? 0));
+        await ctx.reply(`Status: ${member.status}`);
+      });
+
+      const response = await testBot.sendCommand(user, group, "/check");
+
+      expect(response.text).toBe("Status: member");
+    });
+
+    it("should accept string user_id in banChatMember", async () => {
+      const admin = testBot.createUser({ first_name: "Admin" });
+      const target = testBot.createUser({ first_name: "Target" });
+      const group = testBot.createChat({ type: "supergroup", title: "Test Group" });
+
+      testBot.setOwner(group, admin);
+      testBot.setMember(group, target);
+      testBot.setBotAdmin(group, { can_restrict_members: true });
+
+      testBot.command("ban", async (ctx) => {
+        // Use string user_id
+        await ctx.api.banChatMember(ctx.chat.id, String(target.id));
+        await ctx.reply("Banned with string ID!");
+      });
+
+      const response = await testBot.sendCommand(admin, group, "/ban");
+
+      expect(response.text).toBe("Banned with string ID!");
+      const member = testBot.server.memberState.getMember(group.id, target.id);
+      expect(member?.status).toBe("kicked");
+    });
+
+    it("should accept both string chat_id and user_id together", async () => {
+      const admin = testBot.createUser({ first_name: "Admin" });
+      const target = testBot.createUser({ first_name: "Target" });
+      const group = testBot.createChat({ type: "supergroup", title: "Test Group" });
+
+      testBot.setOwner(group, admin);
+      testBot.setMember(group, target);
+      testBot.setBotAdmin(group, { can_promote_members: true });
+
+      testBot.command("promote", async (ctx) => {
+        // Use both string chat_id and user_id
+        await ctx.api.promoteChatMember(String(ctx.chat.id), String(target.id), {
+          can_delete_messages: true,
+        });
+        await ctx.reply("Promoted with string IDs!");
+      });
+
+      const response = await testBot.sendCommand(admin, group, "/promote");
+
+      expect(response.text).toBe("Promoted with string IDs!");
+      const member = testBot.server.memberState.getMember(group.id, target.id);
+      expect(member?.status).toBe("administrator");
+    });
+  });
+
   describe("BotResponse API", () => {
     it("should return BotResponse from sendCommand", async () => {
       testBot.command("test", (ctx) => ctx.reply("Test response"));
@@ -154,7 +233,7 @@ describe("TestBot", () => {
               [{ text: "Option B", callback_data: "b" }],
             ],
           },
-        })
+        }),
       );
 
       const user = testBot.createUser({ first_name: "Dave" });

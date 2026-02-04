@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { TestBot } from "../src/index.js";
 
 describe("Invite Links", () => {
@@ -84,7 +84,7 @@ describe("Invite Links", () => {
       const expireDate = Math.floor(Date.now() / 1000) + 86400; // 24 hours
 
       testBot.command("temp", async (ctx) => {
-        const link = await ctx.createChatInviteLink({ expire_date: expireDate });
+        const _link = await ctx.createChatInviteLink({ expire_date: expireDate });
         await ctx.reply("Temporary link created");
       });
 
@@ -438,8 +438,8 @@ describe("Invite Links", () => {
         // grammY API: createChatSubscriptionInviteLink(subscription_period, subscription_price, other?)
         const link = await ctx.createChatSubscriptionInviteLink(
           2592000, // 30 days
-          100,     // price in stars
-          { name: "Monthly Sub" }
+          100, // price in stars
+          { name: "Monthly Sub" },
         );
         await ctx.reply(`Subscription link: ${link.invite_link}`);
       });

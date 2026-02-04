@@ -33,6 +33,17 @@ Test your grammY bots with confidence by simulating the complete Telegram intera
 - **Reactions**: Add, change, remove message reactions
 - **File Handling**: Photos, documents, video, audio with metadata
 - **Message Formatting**: Parse Markdown/MarkdownV2/HTML to entities
+- **Bot Settings**: Name, description, short description, default admin rights
+- **Profile Photos**: User profile photo management
+- **Stickers**: Sticker sets and custom emoji stickers
+- **Chat Boosts**: Boost simulation, tracking, and API methods
+- **Web App**: Web app data simulation and answerWebAppQuery
+- **Business**: Business connections and messages
+- **Premium Features**: Premium user status tracking
+- **Stars & Transactions**: Star transactions, balance tracking, refunds
+- **Giveaways**: Giveaway creation, completion, and winner announcements
+- **Passport**: Telegram Passport data simulation and error handling
+- **Stories**: Story message simulation and forwarding
 
 ### Developer Experience
 
@@ -40,6 +51,7 @@ Test your grammY bots with confidence by simulating the complete Telegram intera
 - **Test Runner Agnostic**: Works with Vitest, Jest, Mocha, or any runner
 - **Zero Network**: Everything runs in-memory, fast and deterministic
 - **BotResponse Pattern**: Fluent API for asserting bot behavior
+- **Flexible ID Inputs**: All API methods accept both string and number IDs (chat_id, user_id, etc.)
 
 ### Test Isolation
 
@@ -106,6 +118,23 @@ testBot.setBotAdmin(group, { can_manage_topics: true });    // Required for foru
 **Private Chat Behavior:**
 - Permission checks are skipped in private chats (most admin operations don't apply there)
 - Bot can delete both its own messages AND user messages in private chats (like real Telegram)
+
+### Input Validation
+
+The framework validates input like real Telegram:
+
+| Validation | Limit | Error |
+|------------|-------|-------|
+| Message text length | 4096 characters | `message is too long` |
+| Caption length | 1024 characters | `caption is too long` |
+| Photo file size | 10 MB | `file is too big` |
+| Document/audio/video file size | 50 MB | `file is too big` |
+| Poll question length | 300 characters | `POLL_QUESTION_TOO_LONG` |
+| Poll option text length | 1-100 characters | `POLL_OPTION_EMPTY` / `POLL_OPTION_TOO_LONG` |
+| Poll options count | 2-10 options | `POLL_OPTIONS_COUNT_INVALID` |
+| Poll explanation length | 200 characters | `POLL_EXPLANATION_TOO_LONG` |
+| Quiz correct_option_id | Must be valid index | `QUIZ_CORRECT_OPTION_INVALID` |
+| Message deletion (groups) | Within 48 hours | `message can't be deleted` |
 
 **Not validated (minor differences from real Telegram):**
 - **getChatMember for unknown users**: Framework returns "left" status. Real Telegram may return an error.

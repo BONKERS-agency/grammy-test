@@ -1,37 +1,38 @@
 import type {
+  Audio,
+  CallbackQuery,
   Chat,
+  ChatAdministratorRights,
+  ChatInviteLink,
+  ChatMember,
+  ChatPermissions,
+  File,
+  InlineQuery,
+  InlineQueryResult,
   Message,
+  MessageEntity,
+  PassportElementError,
+  Poll,
+  PollOption,
+  ReactionType,
+  Sticker,
   Update,
   User,
   UserFromGetMe,
-  CallbackQuery,
-  InlineQuery,
-  InlineQueryResult,
-  Poll,
-  PollOption,
-  ChatMember,
-  ChatPermissions,
-  ChatInviteLink,
-  ChatAdministratorRights,
-  ForumTopic,
-  MessageEntity,
-  ReactionType,
-  PhotoSize,
-  Document,
-  Audio,
   Video,
   Voice,
-  VideoNote,
-  Sticker,
-  File,
 } from "grammy/types";
+import type { BotResponse } from "./BotResponse.js";
+import { BusinessState } from "./BusinessState.js";
 import { ChatState, type StoredInviteLink } from "./ChatState.js";
-import { MemberState } from "./MemberState.js";
-import { PollState, type StoredPoll } from "./PollState.js";
 import { FileState } from "./FileState.js";
+import { type ParseMode, parseFormattedText } from "./MarkdownParser.js";
+import { MemberState } from "./MemberState.js";
+import { PassportState } from "./PassportState.js";
+import { PaymentState } from "./PaymentState.js";
+import { PollState, type StoredPoll } from "./PollState.js";
+import { StickerState } from "./StickerState.js";
 import { UpdateFactory } from "./UpdateFactory.js";
-import { parseFormattedText, type ParseMode } from "./MarkdownParser.js";
-import { BotResponse, type TelegramError } from "./BotResponse.js";
 
 /**
  * Pending callback query tracking.
@@ -69,6 +70,20 @@ interface MessageReaction {
 }
 
 /**
+ * File size limits in bytes.
+ */
+const FILE_SIZE_LIMITS = {
+  photo: 10 * 1024 * 1024, // 10 MB
+  document: 50 * 1024 * 1024, // 50 MB for bots
+  audio: 50 * 1024 * 1024, // 50 MB
+  video: 50 * 1024 * 1024, // 50 MB
+  voice: 50 * 1024 * 1024, // 50 MB
+  video_note: 50 * 1024 * 1024, // 50 MB
+  sticker: 512 * 1024, // 512 KB for static stickers
+  animation: 50 * 1024 * 1024, // 50 MB
+};
+
+/**
  * Simulates a Telegram server.
  *
  * Maintains state for chats, messages, users, and handles API method calls
@@ -80,6 +95,10 @@ export class TelegramServer {
   readonly memberState: MemberState;
   readonly pollState: PollState;
   readonly fileState: FileState;
+  readonly stickerState: StickerState;
+  readonly businessState: BusinessState;
+  readonly paymentState: PaymentState;
+  readonly passportState: PassportState;
   readonly updateFactory: UpdateFactory;
 
   // Bot info
@@ -101,6 +120,15 @@ export class TelegramServer {
   private chatMenuButtons = new Map<number, { type: string }>();
   private defaultMenuButton: { type: string } = { type: "default" };
 
+  // Bot settings
+  private botName: { name: string; language_code?: string }[] = [];
+  private botDescription: { description: string; language_code?: string }[] = [];
+  private botShortDescription: { short_description: string; language_code?: string }[] = [];
+  private botDefaultAdminRights: {
+    for_channels?: ChatAdministratorRights;
+    for_chats?: ChatAdministratorRights;
+  } = {};
+
   // Current response being built (for tracking API calls)
   private currentResponse: BotResponse | null = null;
 
@@ -110,7 +138,42 @@ export class TelegramServer {
     this.memberState = new MemberState();
     this.pollState = new PollState();
     this.fileState = new FileState();
+    this.stickerState = new StickerState();
+    this.businessState = new BusinessState();
+    this.paymentState = new PaymentState();
+    this.passportState = new PassportState();
     this.updateFactory = new UpdateFactory();
+  }
+
+  // === Helper Methods ===
+
+  /**
+   * Get the next update ID (increments the internal counter).
+   */
+  getNextUpdateId(): number {
+    return this.updateIdCounter++;
+  }
+
+  /**
+   * Parse an ID that can be either a string or number.
+   * Telegram API accepts both formats for chat_id, user_id, etc.
+   */
+  private parseId(value: string | number | undefined): number | undefined {
+    if (value === undefined) return undefined;
+    if (typeof value === "number") return value;
+    const parsed = parseInt(value, 10);
+    return Number.isNaN(parsed) ? undefined : parsed;
+  }
+
+  /**
+   * Parse a required ID, throwing an error if invalid.
+   */
+  private requireId(value: string | number | undefined, name: string): number {
+    const id = this.parseId(value);
+    if (id === undefined) {
+      throw this.createApiError(400, `Bad Request: invalid ${name}`);
+    }
+    return id;
   }
 
   // === Bot Info ===
@@ -139,10 +202,7 @@ export class TelegramServer {
    * Returns false if the bot is not an admin or doesn't have the permission.
    * Note: Always returns true for private chats where admin permissions don't apply.
    */
-  private checkBotPermission(
-    chatId: number,
-    permission: keyof ChatAdministratorRights
-  ): boolean {
+  private checkBotPermission(chatId: number, permission: keyof ChatAdministratorRights): boolean {
     // Private chats don't have admin permissions
     if (this.isPrivateChat(chatId)) {
       return true;
@@ -169,13 +229,10 @@ export class TelegramServer {
   private requireBotPermission(
     chatId: number,
     permission: keyof ChatAdministratorRights,
-    action: string
+    action: string,
   ): void {
     if (!this.checkBotPermission(chatId, permission)) {
-      throw this.createApiError(
-        400,
-        `Bad Request: not enough rights to ${action}`
-      );
+      throw this.createApiError(400, `Bad Request: not enough rights to ${action}`);
     }
   }
 
@@ -225,10 +282,7 @@ export class TelegramServer {
   /**
    * Handle incoming API calls from the bot.
    */
-  async handleApiCall(
-    method: string,
-    payload: Record<string, unknown>
-  ): Promise<unknown> {
+  async handleApiCall(method: string, payload: Record<string, unknown>): Promise<unknown> {
     const handler = this.apiHandlers[method];
     if (!handler) {
       // For unhandled methods, return a generic success
@@ -251,7 +305,7 @@ export class TelegramServer {
       parseMode?: ParseMode;
       replyToMessageId?: number;
       messageThreadId?: number;
-    } = {}
+    } = {},
   ): Update {
     this.ensureChat(chat);
     this.ensureChatMember(chat.id, user);
@@ -297,7 +351,7 @@ export class TelegramServer {
     options: {
       replyToMessageId?: number;
       messageThreadId?: number;
-    } = {}
+    } = {},
   ): Update {
     this.ensureChat(chat);
     this.ensureChatMember(chat.id, user);
@@ -335,12 +389,7 @@ export class TelegramServer {
   /**
    * Simulate a user clicking an inline keyboard button.
    */
-  simulateCallbackQuery(
-    user: User,
-    chat: Chat,
-    data: string,
-    fromMessage?: Message
-  ): Update {
+  simulateCallbackQuery(user: User, chat: Chat, data: string, fromMessage?: Message): Update {
     const queryId = String(this.callbackQueryIdCounter++);
 
     this.pendingCallbackQueries.set(queryId, {
@@ -350,13 +399,15 @@ export class TelegramServer {
 
     // If no message provided, create a minimal message with the chat info
     // This allows ctx.reply() to work in callback query handlers
-    const message = fromMessage ?? {
-      message_id: this.messageIdCounter++,
-      date: this.timestamp(),
-      chat,
-      from: this.botInfo,
-      text: "[Button clicked]",
-    } as Message.TextMessage;
+    const message =
+      fromMessage ??
+      ({
+        message_id: this.messageIdCounter++,
+        date: this.timestamp(),
+        chat,
+        from: this.botInfo,
+        text: "[Button clicked]",
+      } as Message.TextMessage);
 
     const callbackQuery = this.cleanObject({
       id: queryId,
@@ -381,7 +432,7 @@ export class TelegramServer {
     options: {
       offset?: string;
       chatType?: "sender" | "private" | "group" | "supergroup" | "channel";
-    } = {}
+    } = {},
   ): Update {
     const queryId = String(this.inlineQueryIdCounter++);
 
@@ -407,11 +458,7 @@ export class TelegramServer {
   /**
    * Simulate a poll answer.
    */
-  simulatePollAnswer(
-    user: User,
-    pollId: string,
-    optionIds: number[]
-  ): Update {
+  simulatePollAnswer(user: User, pollId: string, optionIds: number[]): Update {
     // Update poll state
     this.pollState.vote(pollId, user.id, optionIds);
 
@@ -432,7 +479,7 @@ export class TelegramServer {
     user: User,
     chat: Chat,
     messageId: number,
-    newReactions: ReactionType[]
+    newReactions: ReactionType[],
   ): Update {
     const key = `${chat.id}:${messageId}`;
     let reaction = this.messageReactions.get(key);
@@ -463,6 +510,360 @@ export class TelegramServer {
   }
 
   /**
+   * Simulate a chat boost being added.
+   */
+  simulateChatBoost(
+    chat: Chat,
+    user: User,
+    source: "premium" | "gift_code" | "giveaway" = "premium",
+  ): Update {
+    this.ensureChat(chat);
+
+    const boostSource =
+      source === "premium"
+        ? { source: "premium" as const, user }
+        : source === "gift_code"
+          ? { source: "gift_code" as const, user }
+          : { source: "giveaway" as const, user, giveaway_message_id: 0 };
+
+    const storedBoost = this.chatState.addBoost(chat.id, boostSource);
+    if (!storedBoost) {
+      throw this.createApiError(400, "Bad Request: chat not found");
+    }
+
+    return {
+      update_id: this.updateIdCounter++,
+      chat_boost: {
+        chat,
+        boost: {
+          boost_id: storedBoost.boost_id,
+          add_date: storedBoost.add_date,
+          expiration_date: storedBoost.expiration_date,
+          source: storedBoost.source,
+        },
+      },
+    } as Update;
+  }
+
+  /**
+   * Simulate a chat boost being removed.
+   */
+  simulateRemovedChatBoost(chat: Chat, boostId: string): Update {
+    this.ensureChat(chat);
+
+    const removedBoost = this.chatState.removeBoost(chat.id, boostId);
+    if (!removedBoost) {
+      throw this.createApiError(400, "Bad Request: boost not found");
+    }
+
+    return {
+      update_id: this.updateIdCounter++,
+      removed_chat_boost: {
+        chat,
+        boost_id: boostId,
+        remove_date: this.timestamp(),
+        source: removedBoost.source,
+      },
+    } as Update;
+  }
+
+  /**
+   * Simulate web app data being sent.
+   */
+  simulateWebAppData(user: User, chat: Chat, buttonText: string, data: string): Update {
+    this.ensureChat(chat);
+    this.ensureChatMember(chat.id, user);
+
+    const message: Message.WebAppDataMessage = {
+      message_id: this.messageIdCounter++,
+      date: this.timestamp(),
+      chat,
+      from: user,
+      web_app_data: {
+        button_text: buttonText,
+        data,
+      },
+    };
+
+    this.chatState.storeMessage(chat.id, message);
+
+    return {
+      update_id: this.updateIdCounter++,
+      message,
+    } as Update;
+  }
+
+  /**
+   * Simulate a business connection update.
+   */
+  simulateBusinessConnection(
+    user: User,
+    userChatId: number,
+    options: {
+      canReply?: boolean;
+      isEnabled?: boolean;
+    } = {},
+  ): Update {
+    const connection = this.businessState.createConnection(user, userChatId, options);
+
+    return {
+      update_id: this.updateIdCounter++,
+      business_connection: this.businessState.toBusinessConnection(connection.id),
+    } as Update;
+  }
+
+  /**
+   * Simulate a business message.
+   */
+  simulateBusinessMessage(
+    user: User,
+    chat: Chat,
+    text: string,
+    businessConnectionId: string,
+  ): Update {
+    this.ensureChat(chat);
+    this.ensureChatMember(chat.id, user);
+
+    const connection = this.businessState.getConnection(businessConnectionId);
+    if (!connection) {
+      throw this.createApiError(400, "Bad Request: business connection not found");
+    }
+
+    const message: Message.TextMessage & { business_connection_id?: string } = {
+      message_id: this.messageIdCounter++,
+      date: this.timestamp(),
+      chat,
+      from: user,
+      text,
+      business_connection_id: businessConnectionId,
+    };
+
+    this.chatState.storeMessage(chat.id, message);
+    this.businessState.trackBusinessMessage(businessConnectionId, message.message_id, chat.id);
+
+    return {
+      update_id: this.updateIdCounter++,
+      business_message: message,
+    } as Update;
+  }
+
+  /**
+   * Simulate passport data being received.
+   */
+  simulatePassportData(
+    user: User,
+    chat: Chat,
+    data: Record<string, unknown>,
+    credentials: Record<string, unknown> = {},
+  ): Update {
+    this.ensureChat(chat);
+    this.ensureChatMember(chat.id, user);
+
+    this.passportState.setPassportData(user.id, data, credentials);
+
+    const passportData = {
+      data: Object.keys(data).map((type) => ({
+        type: type as
+          | "personal_details"
+          | "passport"
+          | "driver_license"
+          | "identity_card"
+          | "internal_passport"
+          | "address"
+          | "utility_bill"
+          | "bank_statement"
+          | "rental_agreement"
+          | "passport_registration"
+          | "temporary_registration"
+          | "email"
+          | "phone_number",
+        data: String(data[type] ?? ""),
+        hash: `hash_${type}_${Date.now()}`,
+      })),
+      credentials: {
+        data: JSON.stringify(credentials),
+        hash: `cred_hash_${Date.now()}`,
+        secret: `secret_${Date.now()}`,
+      },
+    };
+
+    const message: Message & { passport_data?: unknown } = {
+      message_id: this.messageIdCounter++,
+      date: this.timestamp(),
+      chat,
+      from: user,
+      passport_data: passportData,
+    };
+
+    this.chatState.storeMessage(chat.id, message);
+
+    return {
+      update_id: this.updateIdCounter++,
+      message,
+    } as Update;
+  }
+
+  /**
+   * Simulate a giveaway message.
+   */
+  simulateGiveaway(
+    chat: Chat,
+    options: {
+      chats?: Chat[];
+      winnersSelectionDate?: number;
+      winnerCount?: number;
+      prizeDescription?: string;
+      onlyNewMembers?: boolean;
+      hasPublicWinners?: boolean;
+      countryCodes?: string[];
+      premiumSubscriptionMonthCount?: number;
+    } = {},
+  ): Update {
+    this.ensureChat(chat);
+
+    const giveawayData = {
+      chats: options.chats ?? [chat],
+      winners_selection_date:
+        options.winnersSelectionDate ?? Math.floor(Date.now() / 1000) + 7 * 24 * 60 * 60,
+      winner_count: options.winnerCount ?? 1,
+      prize_description: options.prizeDescription,
+      country_codes: options.countryCodes,
+      premium_subscription_month_count: options.premiumSubscriptionMonthCount,
+      ...(options.onlyNewMembers ? { only_new_members: true as const } : {}),
+      ...((options.hasPublicWinners ?? true) ? { has_public_winners: true as const } : {}),
+    };
+
+    const message: Message & { giveaway?: unknown } = {
+      message_id: this.messageIdCounter++,
+      date: this.timestamp(),
+      chat,
+      from: this.botInfo,
+      giveaway: giveawayData,
+    };
+
+    this.chatState.storeMessage(chat.id, message);
+
+    return {
+      update_id: this.updateIdCounter++,
+      message,
+    } as Update;
+  }
+
+  /**
+   * Simulate giveaway completion.
+   */
+  simulateGiveawayCompleted(
+    chat: Chat,
+    giveawayMessageId: number,
+    winners: User[],
+    options: {
+      unclaimedPrizeCount?: number;
+      wasRefunded?: boolean;
+    } = {},
+  ): Update {
+    this.ensureChat(chat);
+
+    const giveawayCompleted = {
+      winner_count: winners.length,
+      unclaimed_prize_count: options.unclaimedPrizeCount ?? 0,
+      giveaway_message: {
+        message_id: giveawayMessageId,
+        date: this.timestamp(),
+        chat,
+      },
+      was_refunded: options.wasRefunded ?? false,
+    };
+
+    const message: Message & { giveaway_completed?: unknown } = {
+      message_id: this.messageIdCounter++,
+      date: this.timestamp(),
+      chat,
+      from: this.botInfo,
+      giveaway_completed: giveawayCompleted,
+    };
+
+    this.chatState.storeMessage(chat.id, message);
+
+    return {
+      update_id: this.updateIdCounter++,
+      message,
+    } as Update;
+  }
+
+  /**
+   * Simulate giveaway winners announcement.
+   */
+  simulateGiveawayWinners(
+    chat: Chat,
+    giveawayMessageId: number,
+    winners: User[],
+    options: {
+      winnersSelectionDate?: number;
+      prizeDescription?: string;
+      additionalChatCount?: number;
+      premiumSubscriptionMonthCount?: number;
+      unclaimedPrizeCount?: number;
+      wasRefunded?: boolean;
+    } = {},
+  ): Update {
+    this.ensureChat(chat);
+
+    const giveawayWinnersData = {
+      chat,
+      giveaway_message_id: giveawayMessageId,
+      winners_selection_date: options.winnersSelectionDate ?? this.timestamp(),
+      winner_count: winners.length,
+      winners,
+      additional_chat_count: options.additionalChatCount,
+      premium_subscription_month_count: options.premiumSubscriptionMonthCount,
+      unclaimed_prize_count: options.unclaimedPrizeCount ?? 0,
+      prize_description: options.prizeDescription,
+      ...(options.wasRefunded ? { was_refunded: true as const } : {}),
+    };
+
+    const message: Message & { giveaway_winners?: unknown } = {
+      message_id: this.messageIdCounter++,
+      date: this.timestamp(),
+      chat,
+      from: this.botInfo,
+      giveaway_winners: giveawayWinnersData,
+    };
+
+    this.chatState.storeMessage(chat.id, message);
+
+    return {
+      update_id: this.updateIdCounter++,
+      message,
+    } as Update;
+  }
+
+  /**
+   * Simulate a story message (forwarded story).
+   */
+  simulateStoryMessage(user: User, chat: Chat, storyId: number, storyChat: Chat): Update {
+    this.ensureChat(chat);
+    this.ensureChatMember(chat.id, user);
+
+    const message: Message & { story?: unknown } = {
+      message_id: this.messageIdCounter++,
+      date: this.timestamp(),
+      chat,
+      from: user,
+      story: {
+        id: storyId,
+        chat: storyChat,
+      },
+    };
+
+    this.chatState.storeMessage(chat.id, message);
+
+    return {
+      update_id: this.updateIdCounter++,
+      message,
+    } as Update;
+  }
+
+  /**
    * Simulate a user sending a photo.
    */
   simulatePhotoMessage(
@@ -476,10 +877,16 @@ export class TelegramServer {
       caption?: string;
       parseMode?: ParseMode;
       replyToMessageId?: number;
-    } = {}
+    } = {},
   ): Update {
     this.ensureChat(chat);
     this.ensureChatMember(chat.id, user);
+
+    // Validate file size
+    const fileSize = options.fileSize ?? options.content?.length ?? 0;
+    if (fileSize > FILE_SIZE_LIMITS.photo) {
+      throw this.createApiError(400, "Bad Request: file is too big");
+    }
 
     const photos = this.fileState.storePhoto(width, height, {
       content: options.content,
@@ -530,10 +937,16 @@ export class TelegramServer {
       caption?: string;
       parseMode?: ParseMode;
       replyToMessageId?: number;
-    } = {}
+    } = {},
   ): Update {
     this.ensureChat(chat);
     this.ensureChatMember(chat.id, user);
+
+    // Validate file size
+    const fileSize = options.fileSize ?? options.content?.length ?? 0;
+    if (fileSize > FILE_SIZE_LIMITS.document) {
+      throw this.createApiError(400, "Bad Request: file is too big");
+    }
 
     const document = this.fileState.storeDocument(fileName, mimeType, {
       content: options.content,
@@ -582,7 +995,7 @@ export class TelegramServer {
       performer?: string;
       caption?: string;
       replyToMessageId?: number;
-    } = {}
+    } = {},
   ): Update {
     this.ensureChat(chat);
     this.ensureChatMember(chat.id, user);
@@ -630,7 +1043,7 @@ export class TelegramServer {
     options: {
       caption?: string;
       replyToMessageId?: number;
-    } = {}
+    } = {},
   ): Update {
     this.ensureChat(chat);
     this.ensureChatMember(chat.id, user);
@@ -676,7 +1089,7 @@ export class TelegramServer {
     options: {
       caption?: string;
       replyToMessageId?: number;
-    } = {}
+    } = {},
   ): Update {
     this.ensureChat(chat);
     this.ensureChatMember(chat.id, user);
@@ -719,7 +1132,7 @@ export class TelegramServer {
     options: {
       emoji?: string;
       setName?: string;
-    } = {}
+    } = {},
   ): Update {
     this.ensureChat(chat);
     this.ensureChatMember(chat.id, user);
@@ -765,7 +1178,7 @@ export class TelegramServer {
       phoneNumber: string;
       firstName: string;
       lastName?: string;
-    }
+    },
   ): Update {
     this.ensureChat(chat);
     this.ensureChatMember(chat.id, user);
@@ -793,12 +1206,7 @@ export class TelegramServer {
   /**
    * Simulate user sending location.
    */
-  simulateLocationMessage(
-    user: User,
-    chat: Chat,
-    latitude: number,
-    longitude: number
-  ): Update {
+  simulateLocationMessage(user: User, chat: Chat, latitude: number, longitude: number): Update {
     this.ensureChat(chat);
     this.ensureChatMember(chat.id, user);
 
@@ -832,7 +1240,7 @@ export class TelegramServer {
       longitude: number;
       title: string;
       address: string;
-    }
+    },
   ): Update {
     this.ensureChat(chat);
     this.ensureChatMember(chat.id, user);
@@ -883,7 +1291,7 @@ export class TelegramServer {
           post_code: string;
         };
       };
-    }
+    },
   ): Update {
     return {
       update_id: this.updateIdCounter++,
@@ -915,7 +1323,7 @@ export class TelegramServer {
         email?: string;
         phone_number?: string;
       };
-    }
+    },
   ): Update {
     this.ensureChat(chat);
 
@@ -958,7 +1366,7 @@ export class TelegramServer {
         street_line2: string;
         post_code: string;
       };
-    }
+    },
   ): Update {
     return {
       update_id: this.updateIdCounter++,
@@ -980,7 +1388,7 @@ export class TelegramServer {
     reactions: Array<{
       type: ReactionType;
       total_count: number;
-    }>
+    }>,
   ): Update {
     return {
       update_id: this.updateIdCounter++,
@@ -1000,7 +1408,7 @@ export class TelegramServer {
     chat: Chat,
     messageId: number,
     newReactions: ReactionType[],
-    oldReactions: ReactionType[]
+    oldReactions: ReactionType[],
   ): Update {
     return {
       update_id: this.updateIdCounter++,
@@ -1129,12 +1537,21 @@ export class TelegramServer {
     // === Messages ===
 
     sendMessage: (payload) => {
-      const chatId = payload.chat_id as number;
+      const chatId = this.requireId(payload.chat_id as string | number, "chat_id");
       const text = payload.text as string;
       const replyMarkup = payload.reply_markup;
       const parseMode = payload.parse_mode as ParseMode | undefined;
-      const replyToMessageId = payload.reply_to_message_id as number | undefined;
-      const messageThreadId = payload.message_thread_id as number | undefined;
+      const replyToMessageId = this.parseId(
+        payload.reply_to_message_id as string | number | undefined,
+      );
+      const messageThreadId = this.parseId(
+        payload.message_thread_id as string | number | undefined,
+      );
+
+      // Validate message length (max 4096 characters)
+      if (text && text.length > 4096) {
+        throw this.createApiError(400, "Bad Request: message is too long");
+      }
 
       const chatData = this.chatState.get(chatId);
       if (!chatData) {
@@ -1146,17 +1563,20 @@ export class TelegramServer {
         chatId,
         this.botInfo.id,
         chatData.chat.type,
-        this.chatState.getSlowModeDelay(chatId)
+        this.chatState.getSlowModeDelay(chatId),
       );
       if (!rateCheck.allowed) {
-        throw this.createApiError(429, "Too Many Requests: retry after " + rateCheck.retryAfter, {
+        throw this.createApiError(429, `Too Many Requests: retry after ${rateCheck.retryAfter}`, {
           retry_after: rateCheck.retryAfter,
         });
       }
 
       // Check if chat is locked
       if (this.chatState.isLocked(chatId)) {
-        throw this.createApiError(400, "Bad Request: not enough rights to send text messages to the chat");
+        throw this.createApiError(
+          400,
+          "Bad Request: not enough rights to send text messages to the chat",
+        );
       }
 
       let finalText = text;
@@ -1195,9 +1615,9 @@ export class TelegramServer {
     },
 
     forwardMessage: (payload) => {
-      const chatId = payload.chat_id as number;
-      const fromChatId = payload.from_chat_id as number;
-      const messageId = payload.message_id as number;
+      const chatId = this.requireId(payload.chat_id as string | number, "chat_id");
+      const fromChatId = this.requireId(payload.from_chat_id as string | number, "from_chat_id");
+      const messageId = this.requireId(payload.message_id as string | number, "message_id");
 
       const chatData = this.chatState.get(chatId);
       if (!chatData) {
@@ -1228,9 +1648,9 @@ export class TelegramServer {
     },
 
     copyMessage: (payload) => {
-      const chatId = payload.chat_id as number;
-      const fromChatId = payload.from_chat_id as number;
-      const messageId = payload.message_id as number;
+      const chatId = this.requireId(payload.chat_id as string | number, "chat_id");
+      const fromChatId = this.requireId(payload.from_chat_id as string | number, "from_chat_id");
+      const messageId = this.requireId(payload.message_id as string | number, "message_id");
 
       const chatData = this.chatState.get(chatId);
       if (!chatData) {
@@ -1266,8 +1686,8 @@ export class TelegramServer {
     },
 
     editMessageText: (payload) => {
-      const chatId = payload.chat_id as number | undefined;
-      const messageId = payload.message_id as number | undefined;
+      const chatId = this.parseId(payload.chat_id as string | number | undefined);
+      const messageId = this.parseId(payload.message_id as string | number | undefined);
       const text = payload.text as string;
       const parseMode = payload.parse_mode as ParseMode | undefined;
       const replyMarkup = payload.reply_markup;
@@ -1306,8 +1726,8 @@ export class TelegramServer {
     },
 
     editMessageCaption: (payload) => {
-      const chatId = payload.chat_id as number | undefined;
-      const messageId = payload.message_id as number | undefined;
+      const chatId = this.parseId(payload.chat_id as string | number | undefined);
+      const messageId = this.parseId(payload.message_id as string | number | undefined);
       const caption = payload.caption as string | undefined;
       const parseMode = payload.parse_mode as ParseMode | undefined;
       const replyMarkup = payload.reply_markup;
@@ -1346,8 +1766,8 @@ export class TelegramServer {
     },
 
     editMessageReplyMarkup: (payload) => {
-      const chatId = payload.chat_id as number | undefined;
-      const messageId = payload.message_id as number | undefined;
+      const chatId = this.parseId(payload.chat_id as string | number | undefined);
+      const messageId = this.parseId(payload.message_id as string | number | undefined);
       const replyMarkup = payload.reply_markup;
 
       if (chatId && messageId) {
@@ -1369,8 +1789,8 @@ export class TelegramServer {
     },
 
     deleteMessage: (payload) => {
-      const chatId = payload.chat_id as number;
-      const messageId = payload.message_id as number;
+      const chatId = this.requireId(payload.chat_id as string | number, "chat_id");
+      const messageId = this.requireId(payload.message_id as string | number, "message_id");
 
       // Get the message to check ownership
       const message = this.chatState.getMessage(chatId, messageId);
@@ -1380,6 +1800,22 @@ export class TelegramServer {
 
       // Check if this is the bot's own message
       const isBotMessage = message.from?.id === this.botInfo.id;
+      const chatData = this.chatState.get(chatId);
+      const isGroupOrSupergroup =
+        chatData?.chat.type === "group" || chatData?.chat.type === "supergroup";
+
+      // In groups/supergroups, check 48-hour time limit for non-admin deletes
+      if (isGroupOrSupergroup && !isBotMessage) {
+        const messageAge = this.timestamp() - message.date;
+        const fortyEightHours = 48 * 60 * 60;
+
+        // If message is older than 48 hours, bot needs can_delete_messages permission
+        if (messageAge > fortyEightHours) {
+          if (!this.checkBotPermission(chatId, "can_delete_messages")) {
+            throw this.createApiError(400, "Bad Request: message can't be deleted for everyone");
+          }
+        }
+      }
 
       // In groups/supergroups/channels, bot needs can_delete_messages to delete others' messages
       // In private chats, bot can delete any message (both its own and user's messages)
@@ -1410,7 +1846,10 @@ export class TelegramServer {
 
       const pending = this.pendingCallbackQueries.get(queryId);
       if (!pending) {
-        throw this.createApiError(400, "Bad Request: query is too old and response timeout expired or query ID is invalid");
+        throw this.createApiError(
+          400,
+          "Bad Request: query is too old and response timeout expired or query ID is invalid",
+        );
       }
 
       if (pending.answered) {
@@ -1448,7 +1887,10 @@ export class TelegramServer {
 
       const pending = this.pendingInlineQueries.get(queryId);
       if (!pending) {
-        throw this.createApiError(400, "Bad Request: query is too old and response timeout expired or query ID is invalid");
+        throw this.createApiError(
+          400,
+          "Bad Request: query is too old and response timeout expired or query ID is invalid",
+        );
       }
 
       if (pending.answered) {
@@ -1473,7 +1915,7 @@ export class TelegramServer {
     // === Chat Info ===
 
     getChat: (payload) => {
-      const chatId = payload.chat_id as number;
+      const chatId = this.requireId(payload.chat_id as string | number, "chat_id");
       const chatData = this.chatState.get(chatId);
       if (!chatData) {
         throw this.createApiError(400, "Bad Request: chat not found");
@@ -1491,8 +1933,8 @@ export class TelegramServer {
     },
 
     getChatMember: (payload) => {
-      const chatId = payload.chat_id as number;
-      const userId = payload.user_id as number;
+      const chatId = this.requireId(payload.chat_id as string | number, "chat_id");
+      const userId = this.requireId(payload.user_id as string | number, "user_id");
 
       if (!this.chatState.has(chatId)) {
         throw this.createApiError(400, "Bad Request: chat not found");
@@ -1510,7 +1952,7 @@ export class TelegramServer {
     },
 
     getChatAdministrators: (payload) => {
-      const chatId = payload.chat_id as number;
+      const chatId = this.requireId(payload.chat_id as string | number, "chat_id");
 
       if (!this.chatState.has(chatId)) {
         throw this.createApiError(400, "Bad Request: chat not found");
@@ -1521,21 +1963,21 @@ export class TelegramServer {
     },
 
     getChatMemberCount: (payload) => {
-      const chatId = payload.chat_id as number;
+      const chatId = this.requireId(payload.chat_id as string | number, "chat_id");
 
       if (!this.chatState.has(chatId)) {
         throw this.createApiError(400, "Bad Request: chat not found");
       }
 
-      return this.memberState.getAllMembers(chatId).filter((m) =>
-        m.status !== "left" && m.status !== "kicked"
-      ).length;
+      return this.memberState
+        .getAllMembers(chatId)
+        .filter((m) => m.status !== "left" && m.status !== "kicked").length;
     },
 
     // === Chat Permissions ===
 
     setChatPermissions: (payload) => {
-      const chatId = payload.chat_id as number;
+      const chatId = this.requireId(payload.chat_id as string | number, "chat_id");
       const permissions = payload.permissions as ChatPermissions;
 
       if (!this.chatState.has(chatId)) {
@@ -1552,7 +1994,7 @@ export class TelegramServer {
     // === Slow Mode ===
 
     setChatSlowModeDelay: (payload) => {
-      const chatId = payload.chat_id as number;
+      const chatId = this.requireId(payload.chat_id as string | number, "chat_id");
       const delay = payload.slow_mode_delay as number;
 
       if (!this.chatState.has(chatId)) {
@@ -1572,8 +2014,8 @@ export class TelegramServer {
     // === Member Management ===
 
     banChatMember: (payload) => {
-      const chatId = payload.chat_id as number;
-      const userId = payload.user_id as number;
+      const chatId = this.requireId(payload.chat_id as string | number, "chat_id");
+      const userId = this.requireId(payload.user_id as string | number, "user_id");
       const untilDate = payload.until_date as number | undefined;
 
       if (!this.chatState.has(chatId)) {
@@ -1585,7 +2027,10 @@ export class TelegramServer {
 
       // Can't ban other admins (unless bot is creator)
       const targetMember = this.memberState.getMember(chatId, userId);
-      if (targetMember && (targetMember.status === "administrator" || targetMember.status === "creator")) {
+      if (
+        targetMember &&
+        (targetMember.status === "administrator" || targetMember.status === "creator")
+      ) {
         const botMember = this.memberState.getMember(chatId, this.botInfo.id);
         if (botMember?.status !== "creator") {
           throw this.createApiError(400, "Bad Request: can't restrict self-administrator");
@@ -1600,8 +2045,8 @@ export class TelegramServer {
     },
 
     unbanChatMember: (payload) => {
-      const chatId = payload.chat_id as number;
-      const userId = payload.user_id as number;
+      const chatId = this.requireId(payload.chat_id as string | number, "chat_id");
+      const userId = this.requireId(payload.user_id as string | number, "user_id");
 
       if (!this.chatState.has(chatId)) {
         throw this.createApiError(400, "Bad Request: chat not found");
@@ -1615,16 +2060,20 @@ export class TelegramServer {
     },
 
     restrictChatMember: (payload) => {
-      const chatId = payload.chat_id as number;
-      const userId = payload.user_id as number;
+      const chatId = this.requireId(payload.chat_id as string | number, "chat_id");
+      const userId = this.requireId(payload.user_id as string | number, "user_id");
       // Handle both direct permissions and nested permissions.permissions (grammY wraps it)
-      const payloadPerms = payload.permissions as ChatPermissions | { permissions: ChatPermissions; until_date?: number };
-      const permissions = (payloadPerms && "permissions" in payloadPerms)
-        ? payloadPerms.permissions as ChatPermissions
-        : payloadPerms;
+      const payloadPerms = payload.permissions as
+        | ChatPermissions
+        | { permissions: ChatPermissions; until_date?: number };
+      const permissions =
+        payloadPerms && "permissions" in payloadPerms
+          ? (payloadPerms.permissions as ChatPermissions)
+          : payloadPerms;
       // until_date might be at root or inside the permissions wrapper
-      const untilDate = (payload.until_date as number | undefined)
-        ?? (payloadPerms && "until_date" in payloadPerms ? payloadPerms.until_date : undefined);
+      const untilDate =
+        (payload.until_date as number | undefined) ??
+        (payloadPerms && "until_date" in payloadPerms ? payloadPerms.until_date : undefined);
 
       if (!this.chatState.has(chatId)) {
         throw this.createApiError(400, "Bad Request: chat not found");
@@ -1635,7 +2084,10 @@ export class TelegramServer {
 
       // Can't restrict other admins
       const targetMember = this.memberState.getMember(chatId, userId);
-      if (targetMember && (targetMember.status === "administrator" || targetMember.status === "creator")) {
+      if (
+        targetMember &&
+        (targetMember.status === "administrator" || targetMember.status === "creator")
+      ) {
         throw this.createApiError(400, "Bad Request: can't restrict self-administrator");
       }
 
@@ -1647,8 +2099,8 @@ export class TelegramServer {
     },
 
     promoteChatMember: (payload) => {
-      const chatId = payload.chat_id as number;
-      const userId = payload.user_id as number;
+      const chatId = this.requireId(payload.chat_id as string | number, "chat_id");
+      const userId = this.requireId(payload.user_id as string | number, "user_id");
 
       if (!this.chatState.has(chatId)) {
         throw this.createApiError(400, "Bad Request: chat not found");
@@ -1664,7 +2116,7 @@ export class TelegramServer {
 
       // Check if any admin rights are being granted
       const hasAnyRight = Object.entries(payload).some(
-        ([key, value]) => key.startsWith("can_") && value === true
+        ([key, value]) => key.startsWith("can_") && value === true,
       );
 
       if (hasAnyRight) {
@@ -1691,8 +2143,8 @@ export class TelegramServer {
     },
 
     setChatAdministratorCustomTitle: (payload) => {
-      const chatId = payload.chat_id as number;
-      const userId = payload.user_id as number;
+      const chatId = this.requireId(payload.chat_id as string | number, "chat_id");
+      const userId = this.requireId(payload.user_id as string | number, "user_id");
       const customTitle = payload.custom_title as string;
 
       // Check bot has permission to promote members (required for setting titles)
@@ -1710,7 +2162,7 @@ export class TelegramServer {
     // === Invite Links ===
 
     createChatInviteLink: (payload) => {
-      const chatId = payload.chat_id as number;
+      const chatId = this.requireId(payload.chat_id as string | number, "chat_id");
       const name = payload.name as string | undefined;
       const expireDate = payload.expire_date as number | undefined;
       const memberLimit = payload.member_limit as number | undefined;
@@ -1742,7 +2194,7 @@ export class TelegramServer {
     },
 
     editChatInviteLink: (payload) => {
-      const chatId = payload.chat_id as number;
+      const chatId = this.requireId(payload.chat_id as string | number, "chat_id");
       const inviteLink = payload.invite_link as string;
       const name = payload.name as string | undefined;
       const expireDate = payload.expire_date as number | undefined;
@@ -1767,7 +2219,7 @@ export class TelegramServer {
     },
 
     createChatSubscriptionInviteLink: (payload) => {
-      const chatId = payload.chat_id as number;
+      const chatId = this.requireId(payload.chat_id as string | number, "chat_id");
       const name = payload.name as string | undefined;
       const subscriptionPeriod = payload.subscription_period as number;
       const subscriptionPrice = payload.subscription_price as number;
@@ -1797,7 +2249,7 @@ export class TelegramServer {
     },
 
     editChatSubscriptionInviteLink: (payload) => {
-      const chatId = payload.chat_id as number;
+      const chatId = this.requireId(payload.chat_id as string | number, "chat_id");
       const inviteLink = payload.invite_link as string;
       const name = payload.name as string | undefined;
 
@@ -1814,7 +2266,7 @@ export class TelegramServer {
     },
 
     revokeChatInviteLink: (payload) => {
-      const chatId = payload.chat_id as number;
+      const chatId = this.requireId(payload.chat_id as string | number, "chat_id");
       const inviteLink = payload.invite_link as string;
 
       // Check bot has permission to invite users
@@ -1830,7 +2282,7 @@ export class TelegramServer {
     },
 
     exportChatInviteLink: (payload) => {
-      const chatId = payload.chat_id as number;
+      const chatId = this.requireId(payload.chat_id as string | number, "chat_id");
 
       // Check bot has permission to invite users
       this.requireBotPermission(chatId, "can_invite_users", "export invite link");
@@ -1845,8 +2297,8 @@ export class TelegramServer {
     },
 
     approveChatJoinRequest: (payload) => {
-      const chatId = payload.chat_id as number;
-      const userId = payload.user_id as number;
+      const chatId = this.requireId(payload.chat_id as string | number, "chat_id");
+      const userId = this.requireId(payload.user_id as string | number, "user_id");
 
       // Check bot has permission to invite users
       this.requireBotPermission(chatId, "can_invite_users", "approve join requests");
@@ -1871,8 +2323,8 @@ export class TelegramServer {
     },
 
     declineChatJoinRequest: (payload) => {
-      const chatId = payload.chat_id as number;
-      const userId = payload.user_id as number;
+      const chatId = this.requireId(payload.chat_id as string | number, "chat_id");
+      const userId = this.requireId(payload.user_id as string | number, "user_id");
 
       // Check bot has permission to invite users
       this.requireBotPermission(chatId, "can_invite_users", "decline join requests");
@@ -1892,8 +2344,8 @@ export class TelegramServer {
     // === Pin Messages ===
 
     pinChatMessage: (payload) => {
-      const chatId = payload.chat_id as number;
-      const messageId = payload.message_id as number;
+      const chatId = this.requireId(payload.chat_id as string | number, "chat_id");
+      const messageId = this.requireId(payload.message_id as string | number, "message_id");
 
       // Check bot has permission to pin messages
       this.requireBotPermission(chatId, "can_pin_messages", "pin messages");
@@ -1906,8 +2358,8 @@ export class TelegramServer {
     },
 
     unpinChatMessage: (payload) => {
-      const chatId = payload.chat_id as number;
-      const messageId = payload.message_id as number | undefined;
+      const chatId = this.requireId(payload.chat_id as string | number, "chat_id");
+      const messageId = this.parseId(payload.message_id as string | number | undefined);
 
       // Check bot has permission to pin messages
       this.requireBotPermission(chatId, "can_pin_messages", "unpin messages");
@@ -1926,7 +2378,7 @@ export class TelegramServer {
     },
 
     unpinAllChatMessages: (payload) => {
-      const chatId = payload.chat_id as number;
+      const chatId = this.requireId(payload.chat_id as string | number, "chat_id");
 
       // Check bot has permission to pin messages
       this.requireBotPermission(chatId, "can_pin_messages", "unpin messages");
@@ -1938,7 +2390,7 @@ export class TelegramServer {
     // === Polls ===
 
     sendPoll: (payload) => {
-      const chatId = payload.chat_id as number;
+      const chatId = this.requireId(payload.chat_id as string | number, "chat_id");
       const question = payload.question as string;
       const rawOptions = payload.options as (string | { text: string })[];
       const isAnonymous = payload.is_anonymous as boolean | undefined;
@@ -1960,8 +2412,51 @@ export class TelegramServer {
         voter_count: 0,
       }));
 
+      // Poll validation
+      // Quiz mode requires correct_option_id
+      if (type === "quiz" && correctOptionId === undefined) {
+        throw this.createApiError(400, "Bad Request: quiz poll must have correct_option_id");
+      }
+
+      // Validate correct_option_id is within valid range
+      if (correctOptionId !== undefined) {
+        if (correctOptionId < 0 || correctOptionId >= pollOptions.length) {
+          throw this.createApiError(400, "Bad Request: QUIZ_CORRECT_OPTION_INVALID");
+        }
+      }
+
+      // Validate open_period (max 600 seconds)
+      if (openPeriod !== undefined && openPeriod > 600) {
+        throw this.createApiError(400, "Bad Request: POLL_OPEN_PERIOD_TOO_LONG");
+      }
+
+      // Validate explanation length (max 200 characters)
+      if (explanation && explanation.length > 200) {
+        throw this.createApiError(400, "Bad Request: POLL_EXPLANATION_TOO_LONG");
+      }
+
+      // Validate question length (max 300 characters)
+      if (question.length > 300) {
+        throw this.createApiError(400, "Bad Request: POLL_QUESTION_TOO_LONG");
+      }
+
+      // Validate option count (2-10 options)
+      if (pollOptions.length < 2 || pollOptions.length > 10) {
+        throw this.createApiError(400, "Bad Request: POLL_OPTIONS_COUNT_INVALID");
+      }
+
+      // Validate option text length (1-100 characters each)
+      for (const option of pollOptions) {
+        if (!option.text || option.text.length === 0) {
+          throw this.createApiError(400, "Bad Request: POLL_OPTION_EMPTY");
+        }
+        if (option.text.length > 100) {
+          throw this.createApiError(400, "Bad Request: POLL_OPTION_TOO_LONG");
+        }
+      }
+
       const poll: Poll = this.cleanObject({
-        id: String(this.pollState["polls"].size + 1),
+        id: String(this.pollState.getPollCount() + 1),
         question,
         options: pollOptions,
         total_voter_count: 0,
@@ -1997,8 +2492,8 @@ export class TelegramServer {
     },
 
     stopPoll: (payload) => {
-      const chatId = payload.chat_id as number;
-      const messageId = payload.message_id as number;
+      const chatId = this.requireId(payload.chat_id as string | number, "chat_id");
+      const messageId = this.requireId(payload.message_id as string | number, "message_id");
 
       const poll = this.pollState.stopPollByMessage(chatId, messageId);
       if (!poll) {
@@ -2011,7 +2506,7 @@ export class TelegramServer {
     // === Forum Topics ===
 
     createForumTopic: (payload) => {
-      const chatId = payload.chat_id as number;
+      const chatId = this.requireId(payload.chat_id as string | number, "chat_id");
       const name = payload.name as string;
       const iconColor = payload.icon_color as number | undefined;
       const iconCustomEmojiId = payload.icon_custom_emoji_id as string | undefined;
@@ -2032,8 +2527,11 @@ export class TelegramServer {
     },
 
     editForumTopic: (payload) => {
-      const chatId = payload.chat_id as number;
-      const messageThreadId = payload.message_thread_id as number;
+      const chatId = this.requireId(payload.chat_id as string | number, "chat_id");
+      const messageThreadId = this.requireId(
+        payload.message_thread_id as string | number,
+        "message_thread_id",
+      );
       const name = payload.name as string | undefined;
       const iconCustomEmojiId = payload.icon_custom_emoji_id as string | undefined;
 
@@ -2048,8 +2546,11 @@ export class TelegramServer {
     },
 
     closeForumTopic: (payload) => {
-      const chatId = payload.chat_id as number;
-      const messageThreadId = payload.message_thread_id as number;
+      const chatId = this.requireId(payload.chat_id as string | number, "chat_id");
+      const messageThreadId = this.requireId(
+        payload.message_thread_id as string | number,
+        "message_thread_id",
+      );
 
       // Check bot has permission to manage topics
       this.requireBotPermission(chatId, "can_manage_topics", "close forum topics");
@@ -2062,8 +2563,11 @@ export class TelegramServer {
     },
 
     reopenForumTopic: (payload) => {
-      const chatId = payload.chat_id as number;
-      const messageThreadId = payload.message_thread_id as number;
+      const chatId = this.requireId(payload.chat_id as string | number, "chat_id");
+      const messageThreadId = this.requireId(
+        payload.message_thread_id as string | number,
+        "message_thread_id",
+      );
 
       // Check bot has permission to manage topics
       this.requireBotPermission(chatId, "can_manage_topics", "reopen forum topics");
@@ -2076,8 +2580,11 @@ export class TelegramServer {
     },
 
     deleteForumTopic: (payload) => {
-      const chatId = payload.chat_id as number;
-      const messageThreadId = payload.message_thread_id as number;
+      const chatId = this.requireId(payload.chat_id as string | number, "chat_id");
+      const messageThreadId = this.requireId(
+        payload.message_thread_id as string | number,
+        "message_thread_id",
+      );
 
       // Check bot has permission to manage topics
       this.requireBotPermission(chatId, "can_manage_topics", "delete forum topics");
@@ -2090,7 +2597,7 @@ export class TelegramServer {
     },
 
     hideGeneralForumTopic: (payload) => {
-      const chatId = payload.chat_id as number;
+      const chatId = this.requireId(payload.chat_id as string | number, "chat_id");
 
       // Check bot has permission to manage topics
       this.requireBotPermission(chatId, "can_manage_topics", "hide general forum topic");
@@ -2103,7 +2610,7 @@ export class TelegramServer {
     },
 
     unhideGeneralForumTopic: (payload) => {
-      const chatId = payload.chat_id as number;
+      const chatId = this.requireId(payload.chat_id as string | number, "chat_id");
 
       // Check bot has permission to manage topics
       this.requireBotPermission(chatId, "can_manage_topics", "unhide general forum topic");
@@ -2116,8 +2623,8 @@ export class TelegramServer {
     },
 
     unpinAllForumTopicMessages: (payload) => {
-      const chatId = payload.chat_id as number;
-      // const messageThreadId = payload.message_thread_id as number;
+      const chatId = this.requireId(payload.chat_id as string | number, "chat_id");
+      // const messageThreadId = this.requireId(payload.message_thread_id as string | number, "message_thread_id");
 
       // Check bot has permission to pin messages
       this.requireBotPermission(chatId, "can_pin_messages", "unpin forum topic messages");
@@ -2133,7 +2640,7 @@ export class TelegramServer {
     // === Payments ===
 
     answerPreCheckoutQuery: (payload) => {
-      const preCheckoutQueryId = payload.pre_checkout_query_id as string;
+      const _preCheckoutQueryId = payload.pre_checkout_query_id as string;
       const ok = payload.ok as boolean;
       const errorMessage = payload.error_message as string | undefined;
 
@@ -2149,11 +2656,11 @@ export class TelegramServer {
     },
 
     sendInvoice: (payload) => {
-      const chatId = payload.chat_id as number;
+      const chatId = this.requireId(payload.chat_id as string | number, "chat_id");
       const title = payload.title as string;
       const description = payload.description as string;
-      const invoicePayload = payload.payload as string;
-      const providerToken = payload.provider_token as string;
+      const _invoicePayload = payload.payload as string;
+      const _providerToken = payload.provider_token as string;
       const currency = payload.currency as string;
       const prices = payload.prices as Array<{ label: string; amount: number }>;
 
@@ -2191,8 +2698,8 @@ export class TelegramServer {
     // === Reactions ===
 
     setMessageReaction: (payload) => {
-      const chatId = payload.chat_id as number;
-      const messageId = payload.message_id as number;
+      const chatId = this.requireId(payload.chat_id as string | number, "chat_id");
+      const messageId = this.requireId(payload.message_id as string | number, "message_id");
       const reaction = payload.reaction as ReactionType[] | undefined;
 
       if (!this.chatState.getMessage(chatId, messageId)) {
@@ -2241,14 +2748,35 @@ export class TelegramServer {
 
     // === Stickers ===
 
-    getStickerSet: () => {
-      throw this.createApiError(400, "Bad Request: sticker set not found");
+    getStickerSet: (payload) => {
+      const name = payload.name as string;
+      const stickerSet = this.stickerState.getStickerSet(name);
+
+      if (!stickerSet) {
+        throw this.createApiError(400, "Bad Request: STICKERSET_INVALID");
+      }
+
+      return stickerSet;
+    },
+
+    getCustomEmojiStickers: (payload) => {
+      const customEmojiIds = payload.custom_emoji_ids as string[];
+
+      if (!customEmojiIds || customEmojiIds.length === 0) {
+        throw this.createApiError(400, "Bad Request: custom_emoji_ids is required");
+      }
+
+      if (customEmojiIds.length > 200) {
+        throw this.createApiError(400, "Bad Request: too many custom emoji ids");
+      }
+
+      return this.stickerState.getCustomEmojiStickers(customEmojiIds);
     },
 
     // === Additional Message Types ===
 
     sendLocation: (payload) => {
-      const chatId = payload.chat_id as number;
+      const chatId = this.requireId(payload.chat_id as string | number, "chat_id");
       const latitude = payload.latitude as number;
       const longitude = payload.longitude as number;
 
@@ -2273,7 +2801,7 @@ export class TelegramServer {
     },
 
     sendVenue: (payload) => {
-      const chatId = payload.chat_id as number;
+      const chatId = this.requireId(payload.chat_id as string | number, "chat_id");
       const latitude = payload.latitude as number;
       const longitude = payload.longitude as number;
       const title = payload.title as string;
@@ -2304,7 +2832,7 @@ export class TelegramServer {
     },
 
     sendContact: (payload) => {
-      const chatId = payload.chat_id as number;
+      const chatId = this.requireId(payload.chat_id as string | number, "chat_id");
       const phoneNumber = payload.phone_number as string;
       const firstName = payload.first_name as string;
       const lastName = payload.last_name as string | undefined;
@@ -2334,7 +2862,7 @@ export class TelegramServer {
     },
 
     sendDice: (payload) => {
-      const chatId = payload.chat_id as number;
+      const chatId = this.requireId(payload.chat_id as string | number, "chat_id");
       const emoji = (payload.emoji as string) || "🎲";
 
       const chatData = this.chatState.get(chatId);
@@ -2344,7 +2872,12 @@ export class TelegramServer {
 
       // Generate random value based on emoji type
       const maxValues: Record<string, number> = {
-        "🎲": 6, "🎯": 6, "🏀": 5, "⚽": 5, "🎰": 64, "🎳": 6,
+        "🎲": 6,
+        "🎯": 6,
+        "🏀": 5,
+        "⚽": 5,
+        "🎰": 64,
+        "🎳": 6,
       };
       const maxValue = maxValues[emoji] || 6;
       const value = Math.floor(Math.random() * maxValue) + 1;
@@ -2365,7 +2898,7 @@ export class TelegramServer {
     },
 
     sendChatAction: (payload) => {
-      const chatId = payload.chat_id as number;
+      const chatId = this.requireId(payload.chat_id as string | number, "chat_id");
       // const action = payload.action as string;
 
       if (!this.chatState.has(chatId)) {
@@ -2377,7 +2910,7 @@ export class TelegramServer {
     },
 
     sendMediaGroup: (payload) => {
-      const chatId = payload.chat_id as number;
+      const chatId = this.requireId(payload.chat_id as string | number, "chat_id");
       const media = payload.media as Array<{ type: string; media: string; caption?: string }>;
 
       const chatData = this.chatState.get(chatId);
@@ -2418,7 +2951,7 @@ export class TelegramServer {
     // === Chat Management ===
 
     leaveChat: (payload) => {
-      const chatId = payload.chat_id as number;
+      const chatId = this.requireId(payload.chat_id as string | number, "chat_id");
 
       if (!this.chatState.has(chatId)) {
         throw this.createApiError(400, "Bad Request: chat not found");
@@ -2430,7 +2963,7 @@ export class TelegramServer {
     },
 
     setChatPhoto: (payload) => {
-      const chatId = payload.chat_id as number;
+      const chatId = this.requireId(payload.chat_id as string | number, "chat_id");
 
       const chatData = this.chatState.get(chatId);
       if (!chatData) {
@@ -2446,7 +2979,7 @@ export class TelegramServer {
     },
 
     deleteChatPhoto: (payload) => {
-      const chatId = payload.chat_id as number;
+      const chatId = this.requireId(payload.chat_id as string | number, "chat_id");
 
       const chatData = this.chatState.get(chatId);
       if (!chatData) {
@@ -2461,7 +2994,7 @@ export class TelegramServer {
     },
 
     setChatTitle: (payload) => {
-      const chatId = payload.chat_id as number;
+      const chatId = this.requireId(payload.chat_id as string | number, "chat_id");
       const title = payload.title as string;
 
       const chatData = this.chatState.get(chatId);
@@ -2481,7 +3014,7 @@ export class TelegramServer {
     },
 
     setChatDescription: (payload) => {
-      const chatId = payload.chat_id as number;
+      const chatId = this.requireId(payload.chat_id as string | number, "chat_id");
       const description = payload.description as string;
 
       const chatData = this.chatState.get(chatId);
@@ -2513,10 +3046,125 @@ export class TelegramServer {
       return true;
     },
 
+    // === Bot Settings ===
+
+    getMyName: (payload) => {
+      const languageCode = payload.language_code as string | undefined;
+      const entry =
+        this.botName.find((e) => e.language_code === languageCode) ||
+        this.botName.find((e) => !e.language_code);
+      return { name: entry?.name || this.botInfo.first_name };
+    },
+
+    setMyName: (payload) => {
+      const name = payload.name as string | undefined;
+      const languageCode = payload.language_code as string | undefined;
+
+      if (name && name.length > 64) {
+        throw this.createApiError(400, "Bad Request: name is too long");
+      }
+
+      // Remove existing entry for this language
+      this.botName = this.botName.filter((e) => e.language_code !== languageCode);
+
+      if (name) {
+        this.botName.push({ name, language_code: languageCode });
+      }
+
+      return true;
+    },
+
+    getMyDescription: (payload) => {
+      const languageCode = payload.language_code as string | undefined;
+      const entry =
+        this.botDescription.find((e) => e.language_code === languageCode) ||
+        this.botDescription.find((e) => !e.language_code);
+      return { description: entry?.description || "" };
+    },
+
+    setMyDescription: (payload) => {
+      const description = payload.description as string | undefined;
+      const languageCode = payload.language_code as string | undefined;
+
+      if (description && description.length > 512) {
+        throw this.createApiError(400, "Bad Request: description is too long");
+      }
+
+      // Remove existing entry for this language
+      this.botDescription = this.botDescription.filter((e) => e.language_code !== languageCode);
+
+      if (description) {
+        this.botDescription.push({ description, language_code: languageCode });
+      }
+
+      return true;
+    },
+
+    getMyShortDescription: (payload) => {
+      const languageCode = payload.language_code as string | undefined;
+      const entry =
+        this.botShortDescription.find((e) => e.language_code === languageCode) ||
+        this.botShortDescription.find((e) => !e.language_code);
+      return { short_description: entry?.short_description || "" };
+    },
+
+    setMyShortDescription: (payload) => {
+      const shortDescription = payload.short_description as string | undefined;
+      const languageCode = payload.language_code as string | undefined;
+
+      if (shortDescription && shortDescription.length > 120) {
+        throw this.createApiError(400, "Bad Request: short description is too long");
+      }
+
+      // Remove existing entry for this language
+      this.botShortDescription = this.botShortDescription.filter(
+        (e) => e.language_code !== languageCode,
+      );
+
+      if (shortDescription) {
+        this.botShortDescription.push({
+          short_description: shortDescription,
+          language_code: languageCode,
+        });
+      }
+
+      return true;
+    },
+
+    getMyDefaultAdministratorRights: (payload) => {
+      const forChannels = payload.for_channels as boolean | undefined;
+      return forChannels
+        ? this.botDefaultAdminRights.for_channels || {}
+        : this.botDefaultAdminRights.for_chats || {};
+    },
+
+    setMyDefaultAdministratorRights: (payload) => {
+      const rights = payload.rights as ChatAdministratorRights | undefined;
+      const forChannels = payload.for_channels as boolean | undefined;
+
+      if (forChannels) {
+        this.botDefaultAdminRights.for_channels = rights;
+      } else {
+        this.botDefaultAdminRights.for_chats = rights;
+      }
+
+      return true;
+    },
+
+    // === User Profile Photos ===
+
+    getUserProfilePhotos: (payload) => {
+      const userId = this.requireId(payload.user_id as string | number, "user_id");
+      const offset = (payload.offset as number) ?? 0;
+      const limit = Math.min((payload.limit as number) ?? 100, 100);
+
+      return this.memberState.getProfilePhotos(userId, offset, limit);
+    },
+
     // === Menu Button ===
 
     setChatMenuButton: (payload) => {
-      const chatId = payload.chat_id as number | undefined;
+      const chatId = this.parseId(payload.chat_id as string | number | undefined);
       const menuButton = payload.menu_button as { type: string } | undefined;
 
       if (chatId) {
@@ -2528,7 +3176,7 @@ export class TelegramServer {
     },
 
     getChatMenuButton: (payload) => {
-      const chatId = payload.chat_id as number | undefined;
+      const chatId = this.parseId(payload.chat_id as string | number | undefined);
 
       if (chatId && this.chatMenuButtons.has(chatId)) {
         return this.chatMenuButtons.get(chatId);
@@ -2541,11 +3189,13 @@ export class TelegramServer {
     answerShippingQuery: (payload) => {
       const shippingQueryId = payload.shipping_query_id as string;
       const ok = payload.ok as boolean;
-      const shippingOptions = payload.shipping_options as Array<{
-        id: string;
-        title: string;
-        prices: Array<{ label: string; amount: number }>;
-      }> | undefined;
+      const shippingOptions = payload.shipping_options as
+        | Array<{
+            id: string;
+            title: string;
+            prices: Array<{ label: string; amount: number }>;
+          }>
+        | undefined;
       const errorMessage = payload.error_message as string | undefined;
 
       if (!ok && !errorMessage) {
@@ -2566,22 +3216,37 @@ export class TelegramServer {
     },
 
     refundStarPayment: (payload) => {
-      const userId = payload.user_id as number;
+      const userId = this.requireId(payload.user_id as string | number, "user_id");
       const telegramPaymentChargeId = payload.telegram_payment_charge_id as string;
 
-      // Just validate and return true - in tests, we verify the call was made
       if (!userId || !telegramPaymentChargeId) {
         throw this.createApiError(400, "Bad Request: missing required parameters");
+      }
+
+      // Actually track the refund in state
+      const refunded = this.paymentState.refundStarPayment(userId, telegramPaymentChargeId);
+      if (!refunded) {
+        // If no transaction found, still return true (Telegram API behavior)
+        // but don't track it
       }
 
       return true;
     },
 
+    getStarTransactions: (payload) => {
+      const offset = (payload.offset as number) ?? 0;
+      const limit = Math.min((payload.limit as number) ?? 100, 100);
+
+      // For bots, this returns the bot's transactions
+      // Use bot's ID to track transactions
+      return this.paymentState.getStarTransactions(this.botInfo.id, { offset, limit });
+    },
+
     // === Message Media Editing ===
 
     editMessageMedia: (payload) => {
-      const chatId = payload.chat_id as number | undefined;
-      const messageId = payload.message_id as number | undefined;
+      const chatId = this.parseId(payload.chat_id as string | number | undefined);
+      const messageId = this.parseId(payload.message_id as string | number | undefined);
       const media = payload.media as { type: string; media: string; caption?: string };
       const replyMarkup = payload.reply_markup;
 
@@ -2618,7 +3283,7 @@ export class TelegramServer {
     // === Game ===
 
     sendGame: (payload) => {
-      const chatId = payload.chat_id as number;
+      const chatId = this.requireId(payload.chat_id as string | number, "chat_id");
       const gameShortName = payload.game_short_name as string;
 
       const chatData = this.chatState.get(chatId);
@@ -2634,12 +3299,14 @@ export class TelegramServer {
         game: {
           title: gameShortName,
           description: `Game: ${gameShortName}`,
-          photo: [{
-            file_id: this.fileState.generateFileId("photo"),
-            file_unique_id: this.fileState.generateFileUniqueId(),
-            width: 640,
-            height: 480,
-          }],
+          photo: [
+            {
+              file_id: this.fileState.generateFileId("photo"),
+              file_unique_id: this.fileState.generateFileUniqueId(),
+              width: 640,
+              height: 480,
+            },
+          ],
         },
       }) as unknown as Message;
 
@@ -2649,16 +3316,95 @@ export class TelegramServer {
       }
       return message;
     },
+
+    // === Chat Boosts ===
+
+    getUserChatBoosts: (payload) => {
+      const chatId = this.requireId(payload.chat_id as string | number, "chat_id");
+      const userId = this.requireId(payload.user_id as string | number, "user_id");
+
+      const boosts = this.chatState.getBoosts(chatId).filter((boost) => {
+        const source = boost.source as { user?: { id: number } };
+        return source.user?.id === userId;
+      });
+
+      return {
+        boosts: boosts.map((b) => ({
+          boost_id: b.boost_id,
+          add_date: b.add_date,
+          expiration_date: b.expiration_date,
+          source: b.source,
+        })),
+      };
+    },
+
+    // === Business Connections ===
+
+    getBusinessConnection: (payload) => {
+      const businessConnectionId = payload.business_connection_id as string;
+
+      const connection = this.businessState.toBusinessConnection(businessConnectionId);
+      if (!connection) {
+        throw this.createApiError(400, "Bad Request: business connection not found");
+      }
+
+      return connection;
+    },
+
+    // === Web App ===
+
+    answerWebAppQuery: (payload) => {
+      const webAppQueryId = payload.web_app_query_id as string;
+      const result = payload.result as Record<string, unknown>;
+
+      if (!webAppQueryId) {
+        throw this.createApiError(400, "Bad Request: web_app_query_id is required");
+      }
+
+      if (!result) {
+        throw this.createApiError(400, "Bad Request: result is required");
+      }
+
+      // Generate a sent inline message id for the result
+      return {
+        inline_message_id: `webapp_result_${Date.now()}`,
+      };
+    },
+
+    // === Passport ===
+
+    setPassportDataErrors: (payload) => {
+      const userId = this.requireId(payload.user_id as string | number, "user_id");
+      const errors = payload.errors as Array<{
+        source: string;
+        type: string;
+        message: string;
+        field_name?: string;
+        data_hash?: string;
+        file_hash?: string;
+        file_hashes?: string[];
+        element_hash?: string;
+      }>;
+
+      if (!errors || !Array.isArray(errors)) {
+        throw this.createApiError(400, "Bad Request: errors is required");
+      }
+
+      this.passportState.setPassportDataErrors(userId, errors as PassportElementError[]);
+      return true;
+    },
   };
 
-  private handleSendMedia(
-    payload: Record<string, unknown>,
-    mediaType: string
-  ): Message {
-    const chatId = payload.chat_id as number;
+  private handleSendMedia(payload: Record<string, unknown>, mediaType: string): Message {
+    const chatId = this.requireId(payload.chat_id as string | number, "chat_id");
     const caption = payload.caption as string | undefined;
     const parseMode = payload.parse_mode as ParseMode | undefined;
     const replyMarkup = payload.reply_markup;
+
+    // Validate caption length (max 1024 characters for media)
+    if (caption && caption.length > 1024) {
+      throw this.createApiError(400, "Bad Request: message caption is too long");
+    }
 
     const chatData = this.chatState.get(chatId);
     if (!chatData) {
@@ -2670,10 +3416,10 @@ export class TelegramServer {
       chatId,
       this.botInfo.id,
       chatData.chat.type,
-      this.chatState.getSlowModeDelay(chatId)
+      this.chatState.getSlowModeDelay(chatId),
     );
     if (!rateCheck.allowed) {
-      throw this.createApiError(429, "Too Many Requests: retry after " + rateCheck.retryAfter, {
+      throw this.createApiError(429, `Too Many Requests: retry after ${rateCheck.retryAfter}`, {
         retry_after: rateCheck.retryAfter,
       });
     }
@@ -2695,12 +3441,14 @@ export class TelegramServer {
     switch (mediaType) {
       case "photo":
         mediaData = {
-          photo: [{
-            file_id: fileId,
-            file_unique_id: fileUniqueId,
-            width: 800,
-            height: 600,
-          }],
+          photo: [
+            {
+              file_id: fileId,
+              file_unique_id: fileUniqueId,
+              width: 800,
+              height: 600,
+            },
+          ],
         };
         break;
       case "document":
@@ -2804,7 +3552,7 @@ export class TelegramServer {
   private createApiError(
     code: number,
     description: string,
-    parameters?: { retry_after?: number; migrate_to_chat_id?: number }
+    parameters?: { retry_after?: number; migrate_to_chat_id?: number },
   ): Error & { code: number; description: string; parameters?: typeof parameters } {
     const error = new Error(description) as Error & {
       code: number;

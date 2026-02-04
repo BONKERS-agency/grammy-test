@@ -1,4 +1,4 @@
-import type { Poll, PollOption, User, Message } from "grammy/types";
+import type { Poll } from "grammy/types";
 
 /**
  * Stored vote information.
@@ -67,17 +67,19 @@ export class PollState {
     return Math.floor(this.currentTime / 1000);
   }
 
+  /**
+   * Get the total number of polls created.
+   */
+  getPollCount(): number {
+    return this.polls.size;
+  }
+
   // === Poll Management ===
 
   /**
    * Store a new poll.
    */
-  createPoll(
-    poll: Poll,
-    chatId: number,
-    messageId: number,
-    creatorId: number
-  ): StoredPoll {
+  createPoll(poll: Poll, chatId: number, messageId: number, creatorId: number): StoredPoll {
     const stored: StoredPoll = {
       poll: { ...poll },
       chatId,

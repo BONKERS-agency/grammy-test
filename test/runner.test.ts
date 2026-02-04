@@ -1,7 +1,7 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { createRunner, createConcurrentSink } from "@grammyjs/runner";
-import { TestBot } from "../src/index.js";
+import { createConcurrentSink, createRunner } from "@grammyjs/runner";
 import type { Message } from "grammy/types";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { TestBot } from "../src/index.js";
 
 describe("Runner Support", () => {
   let testBot: TestBot;
@@ -36,7 +36,7 @@ describe("Runner Support", () => {
       const source = testBot.createRunnerSource();
       const sink = createConcurrentSink(
         { consume: (update) => testBot.handleUpdate(update) },
-        async (err) => console.error(err)
+        async (err) => console.error(err),
       );
 
       // Create runner with our custom source
@@ -76,7 +76,7 @@ describe("Runner Support", () => {
       const source = testBot.createRunnerSource();
       const sink = createConcurrentSink(
         { consume: (update) => testBot.handleUpdate(update) },
-        async (err) => console.error(err)
+        async (err) => console.error(err),
       );
       const handle = createRunner(source, sink);
       handle.start();
@@ -110,7 +110,7 @@ describe("Runner Support", () => {
       const source = testBot.createRunnerSource();
       const sink = createConcurrentSink(
         { consume: (update) => testBot.handleUpdate(update) },
-        async (err) => console.error(err)
+        async (err) => console.error(err),
       );
       const handle = createRunner(source, sink);
       handle.start();
@@ -204,7 +204,7 @@ describe("Runner Support", () => {
         { consume: (update) => testBot.handleUpdate(update) },
         async (err) => {
           errors.push(err.error);
-        }
+        },
       );
       const handle = createRunner(source, sink);
       handle.start();

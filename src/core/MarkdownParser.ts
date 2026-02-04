@@ -450,9 +450,10 @@ function parseHTML(input: string): ParsedText {
 
       // Parse tag name and attributes
       const spaceIndex = tagContent.indexOf(" ");
-      const tagName = spaceIndex === -1
-        ? tagContent.toLowerCase()
-        : tagContent.slice(0, spaceIndex).toLowerCase();
+      const tagName =
+        spaceIndex === -1
+          ? tagContent.toLowerCase()
+          : tagContent.slice(0, spaceIndex).toLowerCase();
 
       // Handle <a> tags specially
       if (tagName === "a") {
@@ -509,7 +510,7 @@ function parseHTML(input: string): ParsedText {
       // Handle <pre> with language attribute
       if (tagName === "pre") {
         // Check for <code class="language-xxx"> inside
-        let closeTag = input.indexOf("</pre>", tagEnd);
+        const closeTag = input.indexOf("</pre>", tagEnd);
         if (closeTag !== -1) {
           let content = input.slice(tagEnd + 1, closeTag);
           let language: string | undefined;
@@ -664,9 +665,10 @@ function formatEntityMarkdown(entity: MessageEntity, content: string): string {
       return `_${content}_`;
     case "code":
       return `\`${content}\``;
-    case "pre":
+    case "pre": {
       const lang = (entity as MessageEntity.PreMessageEntity).language;
       return lang ? `\`\`\`${lang}\n${content}\`\`\`` : `\`\`\`\n${content}\`\`\``;
+    }
     case "text_link":
       return `[${content}](${(entity as MessageEntity.TextLinkMessageEntity).url})`;
     case "text_mention":
@@ -690,9 +692,10 @@ function formatEntityMarkdownV2(entity: MessageEntity, content: string): string 
       return `||${content}||`;
     case "code":
       return `\`${content}\``;
-    case "pre":
+    case "pre": {
       const lang = (entity as MessageEntity.PreMessageEntity).language;
       return lang ? `\`\`\`${lang}\n${content}\`\`\`` : `\`\`\`\n${content}\`\`\``;
+    }
     case "text_link":
       return `[${content}](${(entity as MessageEntity.TextLinkMessageEntity).url})`;
     case "text_mention":
@@ -720,11 +723,12 @@ function formatEntityHTML(entity: MessageEntity, content: string): string {
       return `<tg-spoiler>${content}</tg-spoiler>`;
     case "code":
       return `<code>${content}</code>`;
-    case "pre":
+    case "pre": {
       const lang = (entity as MessageEntity.PreMessageEntity).language;
       return lang
         ? `<pre><code class="language-${lang}">${content}</code></pre>`
         : `<pre>${content}</pre>`;
+    }
     case "text_link":
       return `<a href="${(entity as MessageEntity.TextLinkMessageEntity).url}">${content}</a>`;
     case "text_mention":

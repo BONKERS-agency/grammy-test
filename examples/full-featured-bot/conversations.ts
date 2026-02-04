@@ -5,7 +5,7 @@ import type { MyContext, MyConversation } from "./types.js";
  */
 export async function orderConversation(
   conversation: MyConversation,
-  ctx: MyContext
+  ctx: MyContext,
 ): Promise<void> {
   await ctx.reply("Welcome to Pizza Bot! What size would you like?", {
     reply_markup: {
@@ -48,17 +48,13 @@ export async function orderConversation(
     },
   });
 
-  const confirmCtx = await conversation.waitForCallbackQuery([
-    "order_confirm",
-    "order_cancel",
-  ]);
+  const confirmCtx = await conversation.waitForCallbackQuery(["order_confirm", "order_cancel"]);
 
   if (confirmCtx.callbackQuery.data === "order_confirm") {
     await confirmCtx.answerCallbackQuery("Order placed!");
-    await ctx.reply(
-      `Order confirmed!\n\n${size} ${toppings} pizza is on its way!`,
-      { reply_markup: { remove_keyboard: true } }
-    );
+    await ctx.reply(`Order confirmed!\n\n${size} ${toppings} pizza is on its way!`, {
+      reply_markup: { remove_keyboard: true },
+    });
   } else {
     await confirmCtx.answerCallbackQuery("Order cancelled");
     await ctx.reply("Order cancelled. Come back soon!", {
@@ -72,7 +68,7 @@ export async function orderConversation(
  */
 export async function verifyAgeConversation(
   conversation: MyConversation,
-  ctx: MyContext
+  ctx: MyContext,
 ): Promise<void> {
   let age: number | null = null;
   let attempts = 0;
@@ -83,7 +79,7 @@ export async function verifyAgeConversation(
     await ctx.reply(
       `Please enter your age (must be 18 or older)${
         attempts > 1 ? ` - Attempt ${attempts}/${maxAttempts}` : ""
-      }:`
+      }:`,
     );
 
     const response = await conversation.waitFor("message:text");
@@ -97,7 +93,7 @@ export async function verifyAgeConversation(
 
     const parsed = parseInt(input, 10);
 
-    if (isNaN(parsed)) {
+    if (Number.isNaN(parsed)) {
       await ctx.reply("That's not a valid number. Please enter your age as a number.");
     } else if (parsed < 0 || parsed > 150) {
       await ctx.reply("Please enter a realistic age.");
@@ -122,7 +118,7 @@ export async function verifyAgeConversation(
  */
 export async function feedbackConversation(
   conversation: MyConversation,
-  ctx: MyContext
+  ctx: MyContext,
 ): Promise<void> {
   await ctx.reply("How would you rate our service?", {
     reply_markup: {
@@ -146,7 +142,8 @@ export async function feedbackConversation(
     "rate_5",
   ]);
 
-  const rating = parseInt(ratingCtx.callbackQuery.data!.split("_")[1], 10);
+  const ratingData = ratingCtx.callbackQuery.data ?? "";
+  const rating = parseInt(ratingData.split("_")[1], 10);
   await ratingCtx.answerCallbackQuery(`You rated ${rating}/5`);
 
   await ctx.reply("Would you like to leave a comment? (Type 'skip' to skip)");
@@ -158,7 +155,7 @@ export async function feedbackConversation(
     await ctx.reply(`Thank you for your ${rating}-star rating!`);
   } else {
     await ctx.reply(
-      `Thank you for your feedback!\n\nRating: ${"⭐".repeat(rating)}\nComment: ${comment}`
+      `Thank you for your feedback!\n\nRating: ${"⭐".repeat(rating)}\nComment: ${comment}`,
     );
   }
 }
@@ -168,7 +165,7 @@ export async function feedbackConversation(
  */
 export async function settingsConversation(
   conversation: MyConversation,
-  ctx: MyContext
+  ctx: MyContext,
 ): Promise<void> {
   const session = await conversation.external(() => ctx.session);
 
@@ -204,9 +201,7 @@ export async function settingsConversation(
       });
       const newValue = await conversation.external(() => ctx.session.notifications);
 
-      await actionCtx.answerCallbackQuery(
-        `Notifications ${newValue ? "enabled" : "disabled"}`
-      );
+      await actionCtx.answerCallbackQuery(`Notifications ${newValue ? "enabled" : "disabled"}`);
 
       await actionCtx.editMessageReplyMarkup({
         reply_markup: {

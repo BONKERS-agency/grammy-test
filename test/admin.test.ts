@@ -1,4 +1,5 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import type { Message } from "grammy/types";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { TestBot } from "../src/index.js";
 
 describe("Admin & Moderation", () => {
@@ -21,6 +22,16 @@ describe("Admin & Moderation", () => {
 
       const member = testBot.server.memberState.getMember(group.id, owner.id);
       expect(member?.status).toBe("creator");
+    });
+
+    it("should recognize owner as admin via isAdmin method", async () => {
+      const owner = testBot.createUser({ first_name: "Owner" });
+      const group = testBot.createChat({ type: "supergroup", title: "Test Group" });
+
+      testBot.setOwner(group, owner);
+
+      expect(testBot.server.memberState.isAdmin(group.id, owner.id)).toBe(true);
+      expect(testBot.server.memberState.isOwner(group.id, owner.id)).toBe(true);
     });
 
     it("should set up admin with permissions", async () => {
@@ -63,7 +74,7 @@ describe("Admin & Moderation", () => {
       testBot.setMember(group, member);
 
       testBot.command("ban", async (ctx) => {
-        const chatMember = await ctx.getChatMember(ctx.from!.id);
+        const chatMember = await ctx.getChatMember(ctx.from?.id ?? 0);
         if (chatMember.status !== "administrator" && chatMember.status !== "creator") {
           return ctx.reply("Admin only!");
         }
@@ -83,7 +94,7 @@ describe("Admin & Moderation", () => {
       testBot.setAdmin(group, admin, { can_restrict_members: true });
 
       testBot.command("warn", async (ctx) => {
-        const chatMember = await ctx.getChatMember(ctx.from!.id);
+        const chatMember = await ctx.getChatMember(ctx.from?.id ?? 0);
         if (chatMember.status !== "administrator" && chatMember.status !== "creator") {
           return ctx.reply("Admin only!");
         }
@@ -94,6 +105,24 @@ describe("Admin & Moderation", () => {
       expect(response.text).toBe("User warned.");
     });
 
+    it("should recognize owner as admin for admin-only commands", async () => {
+      const owner = testBot.createUser({ first_name: "Owner" });
+      const group = testBot.createChat({ type: "supergroup", title: "Test Group" });
+
+      testBot.setOwner(group, owner);
+
+      testBot.command("warn", async (ctx) => {
+        const chatMember = await ctx.getChatMember(ctx.from?.id ?? 0);
+        if (chatMember.status !== "administrator" && chatMember.status !== "creator") {
+          return ctx.reply("Admin only!");
+        }
+        await ctx.reply("User warned.");
+      });
+
+      const response = await testBot.sendCommand(owner, group, "/warn");
+      expect(response.text).toBe("User warned.");
+    });
+
     it("should allow command from owner", async () => {
       const owner = testBot.createUser({ first_name: "Owner" });
       const group = testBot.createChat({ type: "supergroup", title: "Test Group" });
@@ -101,7 +130,7 @@ describe("Admin & Moderation", () => {
       testBot.setOwner(group, owner);
 
       testBot.command("settings", async (ctx) => {
-        const chatMember = await ctx.getChatMember(ctx.from!.id);
+        const chatMember = await ctx.getChatMember(ctx.from?.id ?? 0);
         if (chatMember.status !== "creator") {
           return ctx.reply("Owner only!");
         }
@@ -278,7 +307,7 @@ describe("Admin & Moderation", () => {
       testBot.setMember(group, user);
 
       testBot.command("status", async (ctx) => {
-        const member = await ctx.getChatMember(ctx.from!.id);
+        const member = await ctx.getChatMember(ctx.from?.id ?? 0);
         await ctx.reply(`Your status: ${member.status}`);
       });
 
@@ -343,7 +372,7 @@ describe("Admin & Moderation", () => {
         date: Math.floor(Date.now() / 1000),
         chat: group,
         text: "Message to delete",
-      } as any);
+      } as Message);
 
       testBot.command("delete", async (ctx) => {
         await ctx.api.deleteMessage(group.id, 100);

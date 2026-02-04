@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { TestBot } from "../src/index.js";
 
 describe("Polls", () => {
@@ -96,7 +96,7 @@ describe("Polls", () => {
       });
 
       const pollResponse = await testBot.sendCommand(user, chat, "/poll");
-      const pollId = pollResponse.poll!.id;
+      const pollId = pollResponse.poll?.id ?? "";
 
       // Vote on the poll
       const voter = testBot.createUser({ first_name: "Voter" });
@@ -117,7 +117,7 @@ describe("Polls", () => {
       });
 
       const pollResponse = await testBot.sendCommand(user, chat, "/poll");
-      const pollId = pollResponse.poll!.id;
+      const pollId = pollResponse.poll?.id ?? "";
 
       // Multiple users vote
       const voter1 = testBot.createUser({ first_name: "Voter1" });
@@ -143,7 +143,7 @@ describe("Polls", () => {
       });
 
       const pollResponse = await testBot.sendCommand(user, chat, "/poll");
-      const pollId = pollResponse.poll!.id;
+      const pollId = pollResponse.poll?.id ?? "";
 
       const voter = testBot.createUser({ first_name: "Voter" });
 
@@ -169,7 +169,7 @@ describe("Polls", () => {
       });
 
       const pollResponse = await testBot.sendCommand(user, chat, "/poll");
-      const pollId = pollResponse.poll!.id;
+      const pollId = pollResponse.poll?.id ?? "";
 
       const voter = testBot.createUser({ first_name: "Voter" });
 
@@ -196,7 +196,7 @@ describe("Polls", () => {
       });
 
       const pollResponse = await testBot.sendCommand(user, chat, "/multi");
-      const pollId = pollResponse.poll!.id;
+      const pollId = pollResponse.poll?.id ?? "";
 
       const voter = testBot.createUser({ first_name: "Voter" });
 
@@ -231,7 +231,7 @@ describe("Polls", () => {
       });
 
       const pollResponse = await testBot.sendCommand(user, chat, "/poll");
-      const pollId = pollResponse.poll!.id;
+      const pollId = pollResponse.poll?.id ?? "";
 
       const voter = testBot.createUser({ first_name: "Voter" });
       await testBot.vote(voter, pollId, [1]);
@@ -247,9 +247,8 @@ describe("Polls", () => {
       const chat = testBot.createChat({ type: "group", title: "Test Group" });
 
       testBot.command("poll", async (ctx) => {
-        const msg = await ctx.replyWithPoll("Active poll", ["Yes", "No"]);
-        // Store message ID for later
-        (ctx as any).pollMessageId = msg.message_id;
+        const _msg = await ctx.replyWithPoll("Active poll", ["Yes", "No"]);
+        // The message ID will be retrieved from the response
       });
 
       const pollResponse = await testBot.sendCommand(user, chat, "/poll");
@@ -257,7 +256,7 @@ describe("Polls", () => {
 
       // Stop the poll
       testBot.command("stop", async (ctx) => {
-        await ctx.api.stopPoll(chat.id, messageId!);
+        await ctx.api.stopPoll(chat.id, messageId ?? 0);
         await ctx.reply("Poll stopped.");
       });
 
@@ -265,7 +264,8 @@ describe("Polls", () => {
       expect(stopResponse.text).toBe("Poll stopped.");
 
       // Check poll is closed
-      const poll = testBot.server.pollState.getPoll(pollResponse.poll!.id);
+      expect(pollResponse.poll).toBeDefined();
+      const poll = testBot.server.pollState.getPoll(pollResponse.poll.id);
       expect(poll?.is_closed).toBe(true);
     });
   });
@@ -283,7 +283,8 @@ describe("Polls", () => {
       });
 
       const quizResponse = await testBot.sendCommand(user, chat, "/quiz");
-      const pollId = quizResponse.poll!.id;
+      expect(quizResponse.poll).toBeDefined();
+      const pollId = quizResponse.poll?.id ?? "";
 
       // Correct answer
       const voter1 = testBot.createUser({ first_name: "Smart" });

@@ -11,7 +11,8 @@
  *   WEBHOOK_SECRET - Secret token for webhook verification (optional)
  */
 
-import { webhookCallback } from "grammy";
+// Note: For webhook mode, import webhookCallback from "grammy"
+// import { webhookCallback } from "grammy";
 import { createBot } from "./bot.js";
 import type { BotConfig } from "./types.js";
 
@@ -27,7 +28,9 @@ if (!token) {
 
 const config: BotConfig = {
   token,
-  adminIds: process.env.ADMIN_IDS?.split(",").map((id) => parseInt(id.trim(), 10)).filter(Boolean),
+  adminIds: process.env.ADMIN_IDS?.split(",")
+    .map((id) => parseInt(id.trim(), 10))
+    .filter(Boolean),
   webhookUrl: process.env.WEBHOOK_URL,
   webhookSecret: process.env.WEBHOOK_SECRET,
 };

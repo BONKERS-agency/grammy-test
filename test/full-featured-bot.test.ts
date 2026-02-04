@@ -1,16 +1,23 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { session } from "grammy";
 import { conversations, createConversation } from "@grammyjs/conversations";
-import { TestBot } from "../src/index.js";
+import { session } from "grammy";
+import type { Message } from "grammy/types";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+
+// Type for business message update
+type BusinessMessage = Message & {
+  business_connection_id?: string;
+};
+
 import { createBot } from "../examples/full-featured-bot/bot.js";
+import {
+  feedbackConversation,
+  orderConversation,
+  settingsConversation,
+  verifyAgeConversation,
+} from "../examples/full-featured-bot/conversations.js";
 import type { MyContext } from "../examples/full-featured-bot/types.js";
 import { createInitialSessionData } from "../examples/full-featured-bot/types.js";
-import {
-  orderConversation,
-  verifyAgeConversation,
-  feedbackConversation,
-  settingsConversation,
-} from "../examples/full-featured-bot/conversations.js";
+import { TestBot } from "../src/index.js";
 
 describe("Full-Featured Bot", () => {
   let testBot: TestBot<MyContext>;
@@ -22,7 +29,7 @@ describe("Full-Featured Bot", () => {
     testBot.use(
       session({
         initial: createInitialSessionData,
-      })
+      }),
     );
 
     // Set up conversations middleware
@@ -127,8 +134,8 @@ describe("Full-Featured Bot", () => {
 
       expect(response.text).toBe("Choose an option:");
       expect(response.keyboard?.inline).toBeDefined();
-      expect(response.keyboard!.inline![0]).toHaveLength(2);
-      expect(response.keyboard!.inline![0][0].text).toBe("Option A");
+      expect(response.keyboard?.inline?.[0]).toHaveLength(2);
+      expect(response.keyboard?.inline?.[0]?.[0]?.text).toBe("Option A");
     });
 
     it("handles option A selection", async () => {
@@ -147,7 +154,12 @@ describe("Full-Featured Bot", () => {
       const chat = testBot.createChat({ type: "private" });
 
       const menuResponse = await testBot.sendCommand(user, chat, "/menu");
-      const response = await testBot.clickButton(user, chat, "menu_cancel", menuResponse.messages[0]);
+      const response = await testBot.clickButton(
+        user,
+        chat,
+        "menu_cancel",
+        menuResponse.messages[0],
+      );
 
       expect(response.callbackAnswer?.text).toBe("Cancelled");
       expect(response.deletedMessages).toHaveLength(1);
@@ -208,7 +220,7 @@ describe("Full-Featured Bot", () => {
       const targetMsg = await testBot.sendMessage(target, group, "I'm being naughty");
 
       const response = await testBot.sendCommand(admin, group, "/ban", {
-        replyToMessageId: targetMsg.sentMessage!.message_id,
+        replyToMessageId: targetMsg.sentMessage?.message_id,
       });
 
       expect(response.text).toBe("User has been banned.");
@@ -229,7 +241,7 @@ describe("Full-Featured Bot", () => {
       const targetMsg = await testBot.sendMessage(target, group, "Message");
 
       const response = await testBot.sendCommand(admin, group, "/kick", {
-        replyToMessageId: targetMsg.sentMessage!.message_id,
+        replyToMessageId: targetMsg.sentMessage?.message_id,
       });
 
       expect(response.text).toBe("User has been kicked.");
@@ -247,7 +259,7 @@ describe("Full-Featured Bot", () => {
       const targetMsg = await testBot.sendMessage(target, group, "Message");
 
       const response = await testBot.sendCommand(admin, group, "/mute 60", {
-        replyToMessageId: targetMsg.sentMessage!.message_id,
+        replyToMessageId: targetMsg.sentMessage?.message_id,
       });
 
       expect(response.text).toBe("User muted for 60 seconds.");
@@ -271,7 +283,7 @@ describe("Full-Featured Bot", () => {
       const targetMsg = await testBot.sendMessage(target, group, "Message");
 
       const response = await testBot.sendCommand(admin, group, "/unmute", {
-        replyToMessageId: targetMsg.sentMessage!.message_id,
+        replyToMessageId: targetMsg.sentMessage?.message_id,
       });
 
       expect(response.text).toBe("User unmuted.");
@@ -302,7 +314,7 @@ describe("Full-Featured Bot", () => {
       const targetMsg = await testBot.sendMessage(target, group, "Message");
 
       const response = await testBot.sendCommand(owner, group, "/promote", {
-        replyToMessageId: targetMsg.sentMessage!.message_id,
+        replyToMessageId: targetMsg.sentMessage?.message_id,
       });
 
       expect(response.text).toBe("User promoted to admin.");
@@ -323,7 +335,7 @@ describe("Full-Featured Bot", () => {
       const adminMsg = await testBot.sendMessage(admin, group, "Message");
 
       const response = await testBot.sendCommand(owner, group, "/demote", {
-        replyToMessageId: adminMsg.sentMessage!.message_id,
+        replyToMessageId: adminMsg.sentMessage?.message_id,
       });
 
       expect(response.text).toBe("Admin demoted to member.");
@@ -446,7 +458,7 @@ describe("Full-Featured Bot", () => {
       const response = await testBot.sendInlineQuery(user, "hello");
 
       expect(response.inlineResults).toBeDefined();
-      expect(response.inlineResults!.length).toBeGreaterThan(0);
+      expect(response.inlineResults?.length).toBeGreaterThan(0);
     });
 
     it("filters results based on query", async () => {
@@ -456,8 +468,8 @@ describe("Full-Featured Bot", () => {
 
       expect(response.inlineResults).toBeDefined();
       // Should find "Current Time" result
-      const hasTimeResult = response.inlineResults!.some(
-        (r) => r.title?.toLowerCase().includes("time")
+      const hasTimeResult = response.inlineResults?.some((r) =>
+        r.title?.toLowerCase().includes("time"),
       );
       expect(hasTimeResult).toBe(true);
     });
@@ -575,6 +587,265 @@ describe("Full-Featured Bot", () => {
       const response = await testBot.sendCommand(admin, forum, "/topic My New Topic");
 
       expect(response.text).toContain('Forum topic "My New Topic" created!');
+    });
+  });
+
+  describe("Bot Settings", () => {
+    it("shows bot info with /botinfo", async () => {
+      const user = testBot.createUser({ first_name: "User" });
+      const chat = testBot.createChat({ type: "private" });
+
+      // Set up bot info via API handlers
+      await testBot.server.handleApiCall("setMyName", { name: "Test Bot" });
+      await testBot.server.handleApiCall("setMyDescription", {
+        description: "A test bot description",
+      });
+      await testBot.server.handleApiCall("setMyShortDescription", {
+        short_description: "Short desc",
+      });
+
+      const response = await testBot.sendCommand(user, chat, "/botinfo");
+
+      expect(response.text).toContain("Bot Information");
+      expect(response.text).toContain("Test Bot");
+    });
+  });
+
+  describe("Premium Features", () => {
+    it("shows non-premium status", async () => {
+      const user = testBot.createUser({ first_name: "User" });
+      const chat = testBot.createChat({ type: "private" });
+
+      const response = await testBot.sendCommand(user, chat, "/premium");
+
+      expect(response.text).toContain("don't have Premium");
+    });
+
+    it("shows premium status for premium users", async () => {
+      const user = testBot.createUser({ first_name: "PremiumUser" });
+      const chat = testBot.createChat({ type: "private" });
+
+      // Set user as premium
+      testBot.setMember(chat, user);
+      testBot.server.memberState.setPremium(user.id, true);
+
+      const response = await testBot.sendCommand(user, chat, "/premium");
+
+      expect(response.text).toContain("You have Premium status");
+    });
+  });
+
+  describe("Star Transactions", () => {
+    it("shows star balance", async () => {
+      const user = testBot.createUser({ first_name: "User" });
+      const chat = testBot.createChat({ type: "private" });
+
+      // Create some star transactions for the bot (bot receives stars from users)
+      const botId = testBot.botInfo.id;
+      testBot.server.paymentState.createTransaction(botId, 50, {
+        source: { type: "user", user },
+      });
+      testBot.server.paymentState.createTransaction(botId, 100, {
+        source: { type: "user", user },
+      });
+
+      const response = await testBot.sendCommand(user, chat, "/stars");
+
+      expect(response.text).toContain("Star Balance");
+      expect(response.text).toContain("150"); // 50 + 100
+      expect(response.text).toContain("Transactions: 2");
+    });
+  });
+
+  describe("Giveaways", () => {
+    it("creates giveaway as admin", async () => {
+      const admin = testBot.createUser({ first_name: "Admin" });
+      const group = testBot.createChat({ type: "supergroup", title: "Test Group" });
+
+      testBot.setOwner(group, admin);
+
+      const response = await testBot.sendCommand(admin, group, "/giveaway 5");
+
+      expect(response.text).toContain("New Giveaway");
+      expect(response.text).toContain("Winners: 5");
+    });
+
+    it("rejects giveaway from non-admin", async () => {
+      const member = testBot.createUser({ first_name: "Member" });
+      const group = testBot.createChat({ type: "supergroup", title: "Test Group" });
+
+      testBot.setMember(group, member);
+
+      const response = await testBot.sendCommand(member, group, "/giveaway");
+
+      expect(response.text).toBe("This command is for group admins only.");
+    });
+
+    it("handles giveaway completion", async () => {
+      const user = testBot.createUser({ first_name: "User" });
+      const channel = testBot.createChat({ type: "channel", title: "Channel" });
+
+      const update = testBot.server.simulateGiveawayCompleted(channel, 1, [user]);
+
+      await testBot.handleUpdate(update);
+
+      // Bot should reply about completion
+    });
+  });
+
+  describe("Web App", () => {
+    it("sends web app button", async () => {
+      const user = testBot.createUser({ first_name: "User" });
+      const chat = testBot.createChat({ type: "private" });
+
+      const response = await testBot.sendCommand(user, chat, "/webapp");
+
+      expect(response.text).toContain("Open our Web App");
+      expect(response.keyboard?.inline).toBeDefined();
+      expect(response.keyboard?.inline?.[0][0].web_app).toBeDefined();
+    });
+
+    it("handles web app data", async () => {
+      const user = testBot.createUser({ first_name: "User" });
+      const chat = testBot.createChat({ type: "private" });
+
+      // simulateWebAppData params: user, chat, buttonText, data
+      const update = testBot.server.simulateWebAppData(
+        user,
+        chat,
+        "Submit Order",
+        JSON.stringify({ item: "Pizza", quantity: 2 }),
+      );
+
+      await testBot.handleUpdate(update);
+
+      // Check that handler processed the data
+      const messages = testBot.server.getAllMessages(chat.id);
+      const botResponse = messages.find((m) => m.text?.includes("Web App Data Received"));
+      expect(botResponse).toBeDefined();
+    });
+  });
+
+  describe("Stories", () => {
+    it("handles forwarded story", async () => {
+      const user = testBot.createUser({ first_name: "User" });
+      const chat = testBot.createChat({ type: "private" });
+      const storyChat = testBot.createChat({ type: "channel", title: "News Channel" });
+
+      const update = testBot.server.simulateStoryMessage(user, chat, 123, storyChat);
+
+      await testBot.handleUpdate(update);
+
+      const messages = testBot.server.getAllMessages(chat.id);
+      const botResponse = messages.find((m) => m.text?.includes("Nice story"));
+      expect(botResponse).toBeDefined();
+      expect(botResponse?.text).toContain("Story ID: 123");
+    });
+  });
+
+  describe("Passport", () => {
+    it("handles passport data submission", async () => {
+      const user = testBot.createUser({ first_name: "User" });
+      const chat = testBot.createChat({ type: "private" });
+
+      const update = testBot.server.simulatePassportData(user, chat, {
+        personal_details: { first_name: "John", last_name: "Doe" },
+        email: "john@example.com",
+      });
+
+      await testBot.handleUpdate(update);
+
+      const messages = testBot.server.getAllMessages(chat.id);
+      const botResponse = messages.find((m) => m.text?.includes("Passport data received"));
+      expect(botResponse).toBeDefined();
+    });
+
+    it("rejects passport with errors", async () => {
+      const admin = testBot.createUser({ first_name: "Admin" });
+      const target = testBot.createUser({ first_name: "Target" });
+      const group = testBot.createChat({ type: "supergroup", title: "Test Group" });
+
+      testBot.setOwner(group, admin);
+      testBot.setMember(group, target);
+
+      const targetMsg = await testBot.sendMessage(target, group, "My passport");
+
+      const response = await testBot.sendCommand(admin, group, "/rejectpassport", {
+        replyToMessageId: targetMsg.sentMessage?.message_id,
+      });
+
+      expect(response.text).toBe("Passport data errors sent to user.");
+
+      const errors = testBot.server.passportState.getPassportDataErrors(target.id);
+      expect(errors).toHaveLength(1);
+    });
+  });
+
+  describe("Business Messages", () => {
+    it("creates business messages correctly", async () => {
+      const user = testBot.createUser({ first_name: "BusinessUser" });
+      const chat = testBot.createChat({ type: "private" });
+
+      // Create and enable business connection
+      const connection = testBot.server.businessState.createConnection(user, chat.id, {
+        canReply: true,
+        isEnabled: true,
+      });
+
+      // simulateBusinessMessage params: user, chat, text, businessConnectionId
+      const update = testBot.server.simulateBusinessMessage(
+        user,
+        chat,
+        "Business inquiry",
+        connection.id,
+      );
+
+      // Verify business_message update structure
+      expect(update.business_message).toBeDefined();
+      const businessMsg = update.business_message as BusinessMessage;
+      expect(businessMsg.business_connection_id).toBe(connection.id);
+      expect(businessMsg.text).toBe("Business inquiry");
+
+      // Verify message was tracked
+      const businessMessages = testBot.server.businessState.getBusinessMessages(connection.id);
+      expect(businessMessages).toHaveLength(1);
+    });
+  });
+
+  describe("Chat Boosts", () => {
+    it("handles chat boost", async () => {
+      const user = testBot.createUser({ first_name: "Booster" });
+      const channel = testBot.createChat({ type: "channel", title: "Test Channel" });
+
+      // Set up premium user for boost source
+      testBot.setMember(channel, user);
+      testBot.server.memberState.setPremium(user.id, true);
+
+      const update = testBot.server.simulateChatBoost(channel, user, "premium");
+
+      await testBot.handleUpdate(update);
+
+      // Verify boost was tracked
+      const boostCount = testBot.server.chatState.getBoostCount(channel.id);
+      expect(boostCount).toBe(1);
+    });
+
+    it("handles removed chat boost", async () => {
+      const user = testBot.createUser({ first_name: "Booster" });
+      const channel = testBot.createChat({ type: "channel", title: "Test Channel" });
+
+      // First add a boost via simulation (which adds to chatState)
+      const boostUpdate = testBot.server.simulateChatBoost(channel, user, "premium");
+      const boostId = (boostUpdate.chat_boost as { boost: { boost_id: string } }).boost.boost_id;
+
+      // Now remove it
+      const update = testBot.server.simulateRemovedChatBoost(channel, boostId);
+
+      await testBot.handleUpdate(update);
+
+      // Verify boost was removed
+      const boostCount = testBot.server.chatState.getBoostCount(channel.id);
+      expect(boostCount).toBe(0);
     });
   });
 });

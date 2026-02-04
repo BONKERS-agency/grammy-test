@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { TestBot } from "../src/index.js";
 
 describe("File Handling", () => {
@@ -17,7 +17,7 @@ describe("File Handling", () => {
       let receivedPhotoCount = 0;
 
       testBot.on("message:photo", (ctx) => {
-        receivedPhotoCount = ctx.message.photo!.length;
+        receivedPhotoCount = ctx.message.photo?.length ?? 0;
         ctx.reply(`Received photo with ${receivedPhotoCount} sizes`);
       });
 
@@ -37,7 +37,7 @@ describe("File Handling", () => {
       let photoSizes: Array<{ width: number; height: number }> = [];
 
       testBot.on("message:photo", (ctx) => {
-        photoSizes = ctx.message.photo!.map((p) => ({ width: p.width, height: p.height }));
+        photoSizes = (ctx.message.photo ?? []).map((p) => ({ width: p.width, height: p.height }));
         ctx.reply("Photo received");
       });
 
@@ -65,7 +65,12 @@ describe("File Handling", () => {
       const user = testBot.createUser({ first_name: "Charlie" });
       const chat = testBot.createChat({ type: "private" });
 
-      await testBot.sendPhoto(user, chat, { width: 640, height: 480 }, { caption: "My vacation photo" });
+      await testBot.sendPhoto(
+        user,
+        chat,
+        { width: 640, height: 480 },
+        { caption: "My vacation photo" },
+      );
 
       expect(receivedCaption).toBe("My vacation photo");
     });
@@ -76,7 +81,7 @@ describe("File Handling", () => {
       let receivedFileName: string | undefined;
 
       testBot.on("message:document", (ctx) => {
-        receivedFileName = ctx.message.document!.file_name;
+        receivedFileName = ctx.message.document?.file_name;
         ctx.reply(`Document received: ${receivedFileName}`);
       });
 
@@ -97,12 +102,14 @@ describe("File Handling", () => {
       let doc: { fileName?: string; mimeType?: string; fileSize?: number } | undefined;
 
       testBot.on("message:document", (ctx) => {
-        const d = ctx.message.document!;
-        doc = {
-          fileName: d.file_name,
-          mimeType: d.mime_type,
-          fileSize: d.file_size,
-        };
+        const d = ctx.message.document;
+        if (d) {
+          doc = {
+            fileName: d.file_name,
+            mimeType: d.mime_type,
+            fileSize: d.file_size,
+          };
+        }
         ctx.reply("Got it");
       });
 
@@ -126,8 +133,10 @@ describe("File Handling", () => {
       let audioInfo: { duration?: number; title?: string } | undefined;
 
       testBot.on("message:audio", (ctx) => {
-        const a = ctx.message.audio!;
-        audioInfo = { duration: a.duration, title: a.title };
+        const a = ctx.message.audio;
+        if (a) {
+          audioInfo = { duration: a.duration, title: a.title };
+        }
         ctx.reply("Audio received");
       });
 
@@ -150,8 +159,10 @@ describe("File Handling", () => {
       let videoInfo: { width?: number; height?: number; duration?: number } | undefined;
 
       testBot.on("message:video", (ctx) => {
-        const v = ctx.message.video!;
-        videoInfo = { width: v.width, height: v.height, duration: v.duration };
+        const v = ctx.message.video;
+        if (v) {
+          videoInfo = { width: v.width, height: v.height, duration: v.duration };
+        }
         ctx.reply("Video received");
       });
 
@@ -175,7 +186,7 @@ describe("File Handling", () => {
       let voiceDuration: number | undefined;
 
       testBot.on("message:voice", (ctx) => {
-        voiceDuration = ctx.message.voice!.duration;
+        voiceDuration = ctx.message.voice?.duration;
         ctx.reply("Voice message received");
       });
 
@@ -193,7 +204,7 @@ describe("File Handling", () => {
       let fileId: string | undefined;
 
       testBot.on("message:document", (ctx) => {
-        fileId = ctx.message.document!.file_id;
+        fileId = ctx.message.document?.file_id;
         ctx.reply("Stored");
       });
 
@@ -209,7 +220,7 @@ describe("File Handling", () => {
       expect(fileId).toContain("document");
 
       // File should be retrievable
-      const stored = testBot.server.fileState.getFile(fileId!);
+      const stored = testBot.server.fileState.getFile(fileId ?? "");
       expect(stored).toBeDefined();
     });
 
@@ -220,7 +231,7 @@ describe("File Handling", () => {
       let fileId: string | undefined;
 
       testBot.on("message:document", (ctx) => {
-        fileId = ctx.message.document!.file_id;
+        fileId = ctx.message.document?.file_id;
         ctx.reply("Got file");
       });
 
@@ -231,7 +242,7 @@ describe("File Handling", () => {
         content,
       });
 
-      const stored = testBot.server.fileState.getFile(fileId!);
+      const stored = testBot.server.fileState.getFile(fileId ?? "");
       expect(stored?.content).toEqual(content);
     });
   });
@@ -272,7 +283,7 @@ describe("File Handling", () => {
       let storedFileId: string | undefined;
 
       testBot.on("message:document", (ctx) => {
-        storedFileId = ctx.message.document!.file_id;
+        storedFileId = ctx.message.document?.file_id;
         ctx.reply("Stored");
       });
 
@@ -303,7 +314,7 @@ describe("File Handling", () => {
       let stickerEmoji: string | undefined;
 
       testBot.on("message:sticker", (ctx) => {
-        stickerEmoji = ctx.message.sticker!.emoji;
+        stickerEmoji = ctx.message.sticker?.emoji;
         ctx.reply("Nice sticker!");
       });
 
@@ -324,7 +335,7 @@ describe("File Handling", () => {
       let contactPhone: string | undefined;
 
       testBot.on("message:contact", (ctx) => {
-        contactPhone = ctx.message.contact!.phone_number;
+        contactPhone = ctx.message.contact?.phone_number;
         ctx.reply("Contact saved");
       });
 
@@ -346,8 +357,10 @@ describe("File Handling", () => {
       let location: { lat: number; lon: number } | undefined;
 
       testBot.on("message:location", (ctx) => {
-        const loc = ctx.message.location!;
-        location = { lat: loc.latitude, lon: loc.longitude };
+        const loc = ctx.message.location;
+        if (loc) {
+          location = { lat: loc.latitude, lon: loc.longitude };
+        }
         ctx.reply("Location received");
       });
 
@@ -369,7 +382,7 @@ describe("File Handling", () => {
       let venueName: string | undefined;
 
       testBot.on("message:venue", (ctx) => {
-        venueName = ctx.message.venue!.title;
+        venueName = ctx.message.venue?.title;
         ctx.reply("Venue noted");
       });
 

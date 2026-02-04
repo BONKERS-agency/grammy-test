@@ -1,6 +1,7 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { TestBot } from "../src/index.js";
 import { BotError } from "grammy";
+import type { Message } from "grammy/types";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { TestBot } from "../src/index.js";
 
 describe("Error Handling", () => {
   let testBot: TestBot;
@@ -133,7 +134,7 @@ describe("Error Handling", () => {
 
       testBot.command("ban", async (ctx) => {
         // Check if sender is admin before banning
-        const senderMember = await ctx.getChatMember(ctx.from!.id);
+        const senderMember = await ctx.getChatMember(ctx.from?.id ?? 0);
         if (senderMember.status !== "administrator" && senderMember.status !== "creator") {
           return ctx.reply("Admin only!");
         }
@@ -173,7 +174,8 @@ describe("Error Handling", () => {
       });
 
       const pollResponse = await testBot.sendCommand(user, chat, "/poll");
-      const poll = pollResponse.poll!;
+      const poll = pollResponse.poll;
+      expect(poll).toBeDefined();
 
       // Close the poll using stopPoll
       testBot.server.pollState.stopPoll(poll.id);
@@ -192,7 +194,8 @@ describe("Error Handling", () => {
       });
 
       const pollResponse = await testBot.sendCommand(user, chat, "/poll");
-      const poll = pollResponse.poll!;
+      const poll = pollResponse.poll;
+      expect(poll).toBeDefined();
 
       // Vote with invalid option index - should return undefined
       const voteResult = testBot.server.pollState.vote(poll.id, user.id, [99]);
@@ -209,9 +212,14 @@ describe("Error Handling", () => {
       testBot.setOwner(group, admin);
 
       const link = testBot.server.chatState.createInviteLink(group.id, admin, {});
-      testBot.server.chatState.revokeInviteLink(group.id, link!.invite_link);
+      expect(link).toBeDefined();
+      testBot.server.chatState.revokeInviteLink(group.id, link?.invite_link ?? "");
 
-      const joinResponse = await testBot.simulateJoinViaLink(newUser, group, link!.invite_link);
+      const joinResponse = await testBot.simulateJoinViaLink(
+        newUser,
+        group,
+        link?.invite_link ?? "",
+      );
       expect(joinResponse.error).toBeDefined();
       expect(joinResponse.error?.description).toContain("revoked");
     });
@@ -223,14 +231,15 @@ describe("Error Handling", () => {
       testBot.setOwner(group, admin);
 
       const link = testBot.server.chatState.createInviteLink(group.id, admin, { member_limit: 1 });
+      expect(link).toBeDefined();
 
       // First user joins successfully
       const user1 = testBot.createUser({ first_name: "User1" });
-      await testBot.simulateJoinViaLink(user1, group, link!.invite_link);
+      await testBot.simulateJoinViaLink(user1, group, link?.invite_link ?? "");
 
       // Second user should fail
       const user2 = testBot.createUser({ first_name: "User2" });
-      const joinResponse = await testBot.simulateJoinViaLink(user2, group, link!.invite_link);
+      const joinResponse = await testBot.simulateJoinViaLink(user2, group, link?.invite_link ?? "");
       expect(joinResponse.error).toBeDefined();
       expect(joinResponse.error?.description).toContain("limit");
     });
@@ -252,9 +261,14 @@ describe("Error Handling", () => {
 
       // Create an invite link
       const link = testBot.server.chatState.createInviteLink(group.id, admin, {});
+      expect(link).toBeDefined();
 
       // Banned user tries to join
-      const joinResponse = await testBot.simulateJoinViaLink(bannedUser, group, link!.invite_link);
+      const joinResponse = await testBot.simulateJoinViaLink(
+        bannedUser,
+        group,
+        link?.invite_link ?? "",
+      );
       expect(joinResponse.error).toBeDefined();
       expect(joinResponse.error?.description).toContain("banned");
     });
@@ -393,7 +407,7 @@ describe("Error Handling", () => {
       });
 
       await expect(testBot.sendCommand(admin, group, "/ban")).rejects.toThrow(
-        /not enough rights to restrict/
+        /not enough rights to restrict/,
       );
     });
 
@@ -413,14 +427,14 @@ describe("Error Handling", () => {
         chat: group,
         from: user,
         text: "User message",
-      } as any);
+      } as Message);
 
       testBot.command("delete", async (ctx) => {
         await ctx.api.deleteMessage(group.id, 100);
       });
 
       await expect(testBot.sendCommand(admin, group, "/delete")).rejects.toThrow(
-        /not enough rights to delete messages/
+        /not enough rights to delete messages/,
       );
     });
 
@@ -438,7 +452,7 @@ describe("Error Handling", () => {
         chat: group,
         from: { id: testBot.botInfo.id, is_bot: true, first_name: "Bot" },
         text: "Bot's own message",
-      } as any);
+      } as Message);
 
       testBot.command("delete", async (ctx) => {
         await ctx.api.deleteMessage(group.id, 100);
@@ -461,7 +475,7 @@ describe("Error Handling", () => {
         chat: chat,
         from: user,
         text: "User message",
-      } as any);
+      } as Message);
 
       testBot.command("delete", async (ctx) => {
         await ctx.api.deleteMessage(chat.id, 100);
@@ -488,7 +502,7 @@ describe("Error Handling", () => {
           chat: chat,
           from: { id: testBot.botInfo.id, is_bot: true, first_name: "Bot" },
           text: "Pinnable message",
-        } as any);
+        } as Message);
         await ctx.pinChatMessage(100);
         await ctx.reply("Pinned");
       });
@@ -509,7 +523,7 @@ describe("Error Handling", () => {
       });
 
       await expect(testBot.sendCommand(admin, group, "/invite")).rejects.toThrow(
-        /not enough rights to invite/
+        /not enough rights to invite/,
       );
     });
 
@@ -529,7 +543,7 @@ describe("Error Handling", () => {
       });
 
       await expect(testBot.sendCommand(admin, forum, "/topic")).rejects.toThrow(
-        /not enough rights to create forum topics/
+        /not enough rights to create forum topics/,
       );
     });
 
@@ -545,7 +559,7 @@ describe("Error Handling", () => {
       });
 
       await expect(testBot.sendCommand(admin, group, "/title")).rejects.toThrow(
-        /not enough rights to change chat title/
+        /not enough rights to change chat title/,
       );
     });
 

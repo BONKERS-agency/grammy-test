@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { TestBot } from "../src/index.js";
 
 describe("Forum Topics", () => {
@@ -61,7 +61,7 @@ describe("Forum Topics", () => {
       const topics = testBot.server.chatState.getForumTopics(forum.id);
       // Forums auto-create a General topic, so we have 2 (General + My Topic)
       expect(topics).toHaveLength(2);
-      const myTopic = topics.find(t => t.name === "My Topic");
+      const myTopic = topics.find((t) => t.name === "My Topic");
       expect(myTopic).toBeDefined();
       expect(myTopic?.name).toBe("My Topic");
     });
@@ -86,7 +86,7 @@ describe("Forum Topics", () => {
       });
 
       testBot.command("rename", async (ctx) => {
-        await ctx.api.editForumTopic(ctx.chat!.id, topic.message_thread_id, { name: "New Name" });
+        await ctx.api.editForumTopic(ctx.chat?.id, topic.message_thread_id, { name: "New Name" });
         await ctx.reply("Topic renamed");
       });
 
@@ -115,7 +115,7 @@ describe("Forum Topics", () => {
       });
 
       testBot.command("close", async (ctx) => {
-        await ctx.api.closeForumTopic(ctx.chat!.id, topic.message_thread_id);
+        await ctx.api.closeForumTopic(ctx.chat?.id, topic.message_thread_id);
         await ctx.reply("Topic closed");
       });
 
@@ -143,7 +143,7 @@ describe("Forum Topics", () => {
       });
 
       testBot.command("reopen", async (ctx) => {
-        await ctx.api.reopenForumTopic(ctx.chat!.id, topic.message_thread_id);
+        await ctx.api.reopenForumTopic(ctx.chat?.id, topic.message_thread_id);
         await ctx.reply("Topic reopened");
       });
 
@@ -172,7 +172,7 @@ describe("Forum Topics", () => {
       });
 
       testBot.command("delete", async (ctx) => {
-        await ctx.api.deleteForumTopic(ctx.chat!.id, topic.message_thread_id);
+        await ctx.api.deleteForumTopic(ctx.chat?.id, topic.message_thread_id);
         await ctx.reply("Topic deleted");
       });
 
@@ -225,9 +225,15 @@ describe("Forum Topics", () => {
 
       testBot.on("message:text", (ctx) => ctx.reply("Got it"));
 
-      await testBot.sendMessage(user, forum, "Message 1", { messageThreadId: topic1.message_thread_id });
-      await testBot.sendMessage(user, forum, "Message 2", { messageThreadId: topic1.message_thread_id });
-      await testBot.sendMessage(user, forum, "Message 3", { messageThreadId: topic2.message_thread_id });
+      await testBot.sendMessage(user, forum, "Message 1", {
+        messageThreadId: topic1.message_thread_id,
+      });
+      await testBot.sendMessage(user, forum, "Message 2", {
+        messageThreadId: topic1.message_thread_id,
+      });
+      await testBot.sendMessage(user, forum, "Message 3", {
+        messageThreadId: topic2.message_thread_id,
+      });
 
       // Messages are tracked but topic-specific counts would depend on implementation
       // Forums auto-create a General topic, so we have 3 (General + Topic 1 + Topic 2)
@@ -325,7 +331,7 @@ describe("Forum Topics", () => {
       });
 
       testBot.command("unpinall", async (ctx) => {
-        await ctx.api.unpinAllForumTopicMessages(ctx.chat!.id, topic.message_thread_id);
+        await ctx.api.unpinAllForumTopicMessages(ctx.chat?.id, topic.message_thread_id);
         await ctx.reply("All messages unpinned");
       });
 

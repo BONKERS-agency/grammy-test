@@ -5,29 +5,18 @@ import type { ApiCallRecord } from "./TestClient.js";
  * Creates a mock fetch function that routes Telegram API calls
  * to our TelegramServer.
  */
-export function createMockFetch(
-  server: TelegramServer,
-  apiCalls: ApiCallRecord[]
-): typeof fetch {
-  return async (
-    input: string | URL | Request,
-    init?: RequestInit
-  ): Promise<Response> => {
-    const url =
-      typeof input === "string"
-        ? input
-        : input instanceof URL
-          ? input.href
-          : input.url;
+export function createMockFetch(server: TelegramServer, apiCalls: ApiCallRecord[]): typeof fetch {
+  return async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
+    const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
 
     // Extract method name from URL
     // URL format: https://api.telegram.org/bot<token>/<method>
     const methodMatch = url.match(/\/bot[^/]+\/(\w+)/);
     if (!methodMatch) {
-      return new Response(
-        JSON.stringify({ ok: false, description: "Invalid API URL" }),
-        { status: 400, headers: { "Content-Type": "application/json" } }
-      );
+      return new Response(JSON.stringify({ ok: false, description: "Invalid API URL" }), {
+        status: 400,
+        headers: { "Content-Type": "application/json" },
+      });
     }
 
     const method = methodMatch[1];
@@ -79,7 +68,7 @@ export function createMockFetch(
           error_code: err.code ?? 400,
           description: err.description ?? err.message,
         }),
-        { status: 200, headers: { "Content-Type": "application/json" } }
+        { status: 200, headers: { "Content-Type": "application/json" } },
       );
     }
   };

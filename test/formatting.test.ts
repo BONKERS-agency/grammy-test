@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { TestBot } from "../src/index.js";
 
 describe("Message Formatting", () => {
@@ -25,7 +25,7 @@ describe("Message Formatting", () => {
 
       expect(response.text).toBe("This is bold text");
       expect(response.entities).toContainEqual(
-        expect.objectContaining({ type: "bold", offset: 8, length: 4 })
+        expect.objectContaining({ type: "bold", offset: 8, length: 4 }),
       );
     });
 
@@ -41,7 +41,7 @@ describe("Message Formatting", () => {
 
       expect(response.text).toBe("This is italic text");
       expect(response.entities).toContainEqual(
-        expect.objectContaining({ type: "italic", offset: 8, length: 6 })
+        expect.objectContaining({ type: "italic", offset: 8, length: 6 }),
       );
     });
 
@@ -57,7 +57,7 @@ describe("Message Formatting", () => {
 
       expect(response.text).toBe("Use console.log() for debugging");
       expect(response.entities).toContainEqual(
-        expect.objectContaining({ type: "code", offset: 4, length: 13 })
+        expect.objectContaining({ type: "code", offset: 4, length: 13 }),
       );
     });
 
@@ -78,13 +78,15 @@ describe("Message Formatting", () => {
           offset: 6,
           length: 11,
           url: "https://example.com",
-        })
+        }),
       );
     });
 
     it("should parse pre-formatted code blocks", async () => {
       testBot.command("pre", async (ctx) => {
-        await ctx.reply("```\nfunction hello() {\n  return 'world';\n}\n```", { parse_mode: "Markdown" });
+        await ctx.reply("```\nfunction hello() {\n  return 'world';\n}\n```", {
+          parse_mode: "Markdown",
+        });
       });
 
       const user = testBot.createUser({ first_name: "Eve" });
@@ -258,7 +260,7 @@ describe("Message Formatting", () => {
         expect.objectContaining({
           type: "pre",
           language: "javascript",
-        })
+        }),
       );
     });
 
@@ -277,7 +279,7 @@ describe("Message Formatting", () => {
         expect.objectContaining({
           type: "text_link",
           url: "https://example.com",
-        })
+        }),
       );
     });
 
@@ -295,7 +297,7 @@ describe("Message Formatting", () => {
       expect(response.entities).toContainEqual(
         expect.objectContaining({
           type: "text_mention",
-        })
+        }),
       );
     });
 
@@ -354,7 +356,7 @@ describe("Message Formatting", () => {
         expect.objectContaining({
           type: "custom_emoji",
           custom_emoji_id: "5368324170671202286",
-        })
+        }),
       );
     });
 
@@ -402,7 +404,7 @@ describe("Message Formatting", () => {
       expect(response.entities).toBeDefined();
       expect(response.entities).toHaveLength(3);
 
-      const types = response.entities!.map((e) => e.type);
+      const types = (response.entities ?? []).map((e) => e.type);
       expect(types).toContain("bold");
       expect(types).toContain("italic");
       expect(types).toContain("code");
@@ -461,15 +463,13 @@ describe("Message Formatting", () => {
       const response = await testBot.sendCommand(user, chat, "/photo");
 
       expect(response.captionEntities).toBeDefined();
-      expect(response.captionEntities).toContainEqual(
-        expect.objectContaining({ type: "bold" })
-      );
+      expect(response.captionEntities).toContainEqual(expect.objectContaining({ type: "bold" }));
     });
   });
 
   describe("Edit Message Formatting", () => {
     it("should parse formatting in edited messages", async () => {
-      let editedEntities: Array<{ type: string }> = [];
+      const _editedEntities: Array<{ type: string }> = [];
 
       testBot.command("msg", async (ctx) => {
         const msg = await ctx.reply("Original");
@@ -486,7 +486,7 @@ describe("Message Formatting", () => {
       // The edited message should have entities
       expect(response.editedMessages).toHaveLength(1);
       expect(response.editedMessages[0].entities).toContainEqual(
-        expect.objectContaining({ type: "bold" })
+        expect.objectContaining({ type: "bold" }),
       );
     });
   });

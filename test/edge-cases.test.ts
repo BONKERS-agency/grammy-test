@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { TestBot } from "../src/index.js";
 
 describe("Edge Cases", () => {
@@ -48,7 +48,7 @@ describe("Edge Cases", () => {
           reply_markup: {
             inline_keyboard: [[{ text: "Option A", callback_data: "a" }]],
           },
-        })
+        }),
       );
 
       const user = testBot.createUser({ first_name: "Charlie" });
@@ -99,7 +99,7 @@ describe("Edge Cases", () => {
 
     it("should handle poll with maximum options (10)", async () => {
       testBot.command("bigpoll", (ctx) =>
-        ctx.replyWithPoll("Pick one:", ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"])
+        ctx.replyWithPoll("Pick one:", ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]),
       );
 
       const user = testBot.createUser({ first_name: "Grace" });
@@ -118,13 +118,13 @@ describe("Edge Cases", () => {
             .map((_, col) => ({
               text: `${row},${col}`,
               callback_data: `cell_${row}_${col}`,
-            }))
+            })),
         );
 
       testBot.command("grid", (ctx) =>
         ctx.reply("Grid:", {
           reply_markup: { inline_keyboard: keyboard },
-        })
+        }),
       );
 
       const user = testBot.createUser({ first_name: "Henry" });
@@ -214,7 +214,8 @@ describe("Edge Cases", () => {
       testBot.command("poll", (ctx) => ctx.replyWithPoll("Question?", ["A", "B"]));
 
       const response = await testBot.sendCommand(user, chat, "/poll");
-      const poll = response.poll!;
+      const poll = response.poll;
+      expect(poll).toBeDefined();
 
       // Poll should be open
       expect(poll.is_closed).toBe(false);
@@ -237,22 +238,25 @@ describe("Edge Cases", () => {
       testBot.setOwner(group, admin);
 
       // Create link
-      const link = testBot.server.chatState.createInviteLink(group.id, admin, { name: "Test Link" });
+      const link = testBot.server.chatState.createInviteLink(group.id, admin, {
+        name: "Test Link",
+      });
       expect(link).toBeDefined();
       expect(link?.is_revoked).toBe(false);
 
       // Edit link
-      const edited = testBot.server.chatState.editInviteLink(group.id, link!.invite_link, {
+      expect(link).toBeDefined();
+      const edited = testBot.server.chatState.editInviteLink(group.id, link?.invite_link ?? "", {
         name: "Updated Link",
       });
       expect(edited?.name).toBe("Updated Link");
 
       // Revoke link
-      const revoked = testBot.server.chatState.revokeInviteLink(group.id, link!.invite_link);
+      const revoked = testBot.server.chatState.revokeInviteLink(group.id, link?.invite_link ?? "");
       expect(revoked?.is_revoked).toBe(true);
 
       // Check link is invalid
-      const isValid = testBot.server.chatState.isInviteLinkValid(group.id, link!.invite_link);
+      const isValid = testBot.server.chatState.isInviteLinkValid(group.id, link?.invite_link ?? "");
       expect(isValid).toBe(false);
     });
   });
@@ -260,7 +264,7 @@ describe("Edge Cases", () => {
   describe("Multiple Entity Types", () => {
     it("should handle message with multiple entity types", async () => {
       testBot.command("format", (ctx) =>
-        ctx.reply("*Bold* _italic_ `code` [link](https://example.com)", { parse_mode: "Markdown" })
+        ctx.reply("*Bold* _italic_ `code` [link](https://example.com)", { parse_mode: "Markdown" }),
       );
 
       const user = testBot.createUser({ first_name: "User" });
@@ -305,7 +309,11 @@ describe("Edge Cases", () => {
       await testBot.sendMessage(user, chat, "3");
 
       const messages = testBot.server.getBotMessages(chat.id);
-      expect(messages.map((m) => (m as { text?: string }).text)).toEqual(["Echo: 1", "Echo: 2", "Echo: 3"]);
+      expect(messages.map((m) => (m as { text?: string }).text)).toEqual([
+        "Echo: 1",
+        "Echo: 2",
+        "Echo: 3",
+      ]);
     });
 
     it("should track multiple messages in order", async () => {
@@ -339,9 +347,11 @@ describe("Edge Cases", () => {
       testBot.command("menu", (ctx) =>
         ctx.reply("Choose:", {
           reply_markup: {
-            inline_keyboard: [[{ text: "Special", callback_data: "data:with:colons&special=chars" }]],
+            inline_keyboard: [
+              [{ text: "Special", callback_data: "data:with:colons&special=chars" }],
+            ],
           },
-        })
+        }),
       );
 
       testBot.callbackQuery(/^data:/, (ctx) => {
@@ -382,7 +392,9 @@ describe("Edge Cases", () => {
     });
 
     it("should handle document with various MIME types", async () => {
-      testBot.on("message:document", (ctx) => ctx.reply(`Type: ${ctx.message.document!.mime_type}`));
+      testBot.on("message:document", (ctx) =>
+        ctx.reply(`Type: ${ctx.message.document?.mime_type}`),
+      );
 
       const user = testBot.createUser({ first_name: "User" });
       const chat = testBot.createChat({ type: "private" });
@@ -412,7 +424,12 @@ describe("Edge Cases", () => {
 
       // Restrict for 60 seconds
       const untilDate = Math.floor(Date.now() / 1000) + 60;
-      testBot.server.memberState.restrict(group.id, target.id, { can_send_messages: false }, untilDate);
+      testBot.server.memberState.restrict(
+        group.id,
+        target.id,
+        { can_send_messages: false },
+        untilDate,
+      );
 
       // Should be restricted
       expect(testBot.server.memberState.canSendMessages(group.id, target.id)).toBe(false);
@@ -432,10 +449,14 @@ describe("Edge Cases", () => {
 
       // Create link that expires in 60 seconds
       const expireDate = Math.floor(Date.now() / 1000) + 60;
-      const link = testBot.server.chatState.createInviteLink(group.id, admin, { expire_date: expireDate });
+      const link = testBot.server.chatState.createInviteLink(group.id, admin, {
+        expire_date: expireDate,
+      });
 
       // Should be valid
-      expect(testBot.server.chatState.isInviteLinkValid(group.id, link!.invite_link)).toBe(true);
+      expect(testBot.server.chatState.isInviteLinkValid(group.id, link?.invite_link ?? "")).toBe(
+        true,
+      );
 
       // Note: Time advancement for invite links would need implementation
       // This test documents expected behavior
@@ -450,7 +471,9 @@ describe("Edge Cases", () => {
       testBot.command("start", (ctx) => ctx.reply("Original message"));
       testBot.on("message:text", (ctx) => {
         if (ctx.message.reply_to_message) {
-          return ctx.reply(`Replying to: ${(ctx.message.reply_to_message as { text?: string }).text}`);
+          return ctx.reply(
+            `Replying to: ${(ctx.message.reply_to_message as { text?: string }).text}`,
+          );
         }
         return ctx.reply("No reply target");
       });

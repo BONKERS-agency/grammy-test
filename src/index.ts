@@ -1,55 +1,80 @@
 // Core exports
-export { TelegramServer } from "./core/TelegramServer.js";
-export { createTestTransformer, type ApiCallRecord } from "./core/TestClient.js";
-export { TestBot, createTestBot, type TestBotConfig, type SendMessageOptions } from "./core/TestBot.js";
-export { FetchInterceptor } from "./core/FetchInterceptor.js";
-export { createMockFetch } from "./core/MockFetch.js";
+
+// Response and factories
+export { BotResponse, createBotResponse, type TelegramError } from "./core/BotResponse.js";
+export {
+  BusinessState,
+  type StoredBusinessConnection,
+  type StoredBusinessMessage,
+} from "./core/BusinessState.js";
+// State management
+export {
+  ChatState,
+  type ChatStateData,
+  type StoredChatBoost,
+  type StoredForumTopic,
+  type StoredInviteLink,
+} from "./core/ChatState.js";
 export {
   ConversationTester,
   createConversationTester,
 } from "./core/ConversationTester.js";
-
-// State management
-export { ChatState, type StoredInviteLink, type StoredForumTopic, type ChatStateData } from "./core/ChatState.js";
-export { MemberState, type StoredMember, type MemberStatus, type RateLimitState } from "./core/MemberState.js";
-export { PollState, type StoredPoll, type StoredVote } from "./core/PollState.js";
-export { FileState, type StoredFile, type FileType } from "./core/FileState.js";
-
-// Response and factories
-export { BotResponse, createBotResponse, type TelegramError } from "./core/BotResponse.js";
-export { UpdateFactory, createUpdateFactory, type IdCounters } from "./core/UpdateFactory.js";
-
-// Transport layer
-export { UpdateQueue, createUpdateQueue } from "./core/UpdateQueue.js";
+export { FetchInterceptor } from "./core/FetchInterceptor.js";
+export { FileState, type FileType, type StoredFile } from "./core/FileState.js";
+// Parsing
 export {
-  WebhookSimulator,
-  createWebhookSimulator,
-  type WebhookAdapter,
-  type WebhookOptions,
-  type MockExpressRequest,
-  type MockExpressResponse,
-  type MockHonoContext,
-  type MockFastifyRequest,
-  type MockFastifyReply,
-  type WebhookSimulationResult,
-} from "./core/WebhookSimulator.js";
-
+  formatText,
+  type ParsedText,
+  type ParseMode,
+  parseFormattedText,
+} from "./core/MarkdownParser.js";
+export {
+  MemberState,
+  type MemberStatus,
+  type RateLimitState,
+  type StoredMember,
+  type StoredProfilePhoto,
+} from "./core/MemberState.js";
+export { createMockFetch } from "./core/MockFetch.js";
+export { PassportState, type StoredPassportData } from "./core/PassportState.js";
+export { PaymentState, type StoredStarTransaction } from "./core/PaymentState.js";
+export { PollState, type StoredPoll, type StoredVote } from "./core/PollState.js";
 // Runner support (for @grammyjs/runner)
 export {
+  createTestUpdateSource,
   TestUpdateSource,
   TestUpdateSupplier,
-  createTestUpdateSource,
 } from "./core/RunnerSupport.js";
-
+export { StickerState, type StoredStickerSet } from "./core/StickerState.js";
+export { TelegramServer } from "./core/TelegramServer.js";
+export {
+  createTestBot,
+  type SendMessageOptions,
+  TestBot,
+  type TestBotConfig,
+} from "./core/TestBot.js";
+export { type ApiCallRecord, createTestTransformer } from "./core/TestClient.js";
+export { createUpdateFactory, type IdCounters, UpdateFactory } from "./core/UpdateFactory.js";
+// Transport layer
+export { createUpdateQueue, UpdateQueue } from "./core/UpdateQueue.js";
+export {
+  createWebhookSimulator,
+  type MockExpressRequest,
+  type MockExpressResponse,
+  type MockFastifyReply,
+  type MockFastifyRequest,
+  type MockHonoContext,
+  type WebhookAdapter,
+  type WebhookOptions,
+  type WebhookSimulationResult,
+  WebhookSimulator,
+} from "./core/WebhookSimulator.js";
 // Worker/Queue simulation (for message queue patterns)
 export {
-  WorkerSimulator,
   createWorkerSimulator,
   type QueuedJob,
+  WorkerSimulator,
 } from "./core/WorkerSimulator.js";
-
-// Parsing
-export { parseFormattedText, formatText, type ParseMode, type ParsedText } from "./core/MarkdownParser.js";
 
 // Type exports
 export * from "./types/index.js";

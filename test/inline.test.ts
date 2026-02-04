@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { TestBot } from "../src/index.js";
 
 describe("Inline Queries", () => {
@@ -30,7 +30,7 @@ describe("Inline Queries", () => {
 
       expect(response.inlineResults).toBeDefined();
       expect(response.inlineResults).toHaveLength(1);
-      expect(response.inlineResults![0].title).toBe("Result 1");
+      expect(response.inlineResults?.[0].title).toBe("Result 1");
     });
 
     it("should return multiple results", async () => {
@@ -62,7 +62,7 @@ describe("Inline Queries", () => {
       const response = await testBot.sendInlineQuery(user, "hello");
 
       expect(response.inlineResults).toHaveLength(3);
-      expect(response.inlineResults![0].title).toBe("Result for: hello");
+      expect(response.inlineResults?.[0].title).toBe("Result for: hello");
     });
 
     it("should handle empty query", async () => {
@@ -83,7 +83,7 @@ describe("Inline Queries", () => {
       const response = await testBot.sendInlineQuery(user, "");
 
       expect(response.inlineResults).toHaveLength(1);
-      expect(response.inlineResults![0].title).toBe("Type to search...");
+      expect(response.inlineResults?.[0].title).toBe("Type to search...");
     });
 
     it("should filter results based on query", async () => {
@@ -99,7 +99,7 @@ describe("Inline Queries", () => {
             id: String(i),
             title: item,
             input_message_content: { message_text: `Selected: ${item}` },
-          }))
+          })),
         );
       });
 
@@ -135,11 +135,11 @@ describe("Inline Queries", () => {
 
       const page1 = await testBot.sendInlineQuery(user, "search");
       expect(page1.inlineResults).toHaveLength(5);
-      expect(page1.inlineResults![0].title).toBe("Result 1");
+      expect(page1.inlineResults?.[0].title).toBe("Result 1");
 
       const page2 = await testBot.sendInlineQuery(user, "search", { offset: "5" });
       expect(page2.inlineResults).toHaveLength(5);
-      expect(page2.inlineResults![0].title).toBe("Result 6");
+      expect(page2.inlineResults?.[0].title).toBe("Result 6");
     });
 
     it("should handle chat type filter", async () => {
@@ -158,10 +158,10 @@ describe("Inline Queries", () => {
       const user = testBot.createUser({ first_name: "Frank" });
 
       const privateResponse = await testBot.sendInlineQuery(user, "test", { chatType: "private" });
-      expect(privateResponse.inlineResults![0].title).toBe("Chat type: private");
+      expect(privateResponse.inlineResults?.[0].title).toBe("Chat type: private");
 
       const groupResponse = await testBot.sendInlineQuery(user, "test", { chatType: "group" });
-      expect(groupResponse.inlineResults![0].title).toBe("Chat type: group");
+      expect(groupResponse.inlineResults?.[0].title).toBe("Chat type: group");
     });
   });
 
@@ -233,7 +233,7 @@ describe("Inline Queries", () => {
       const response = await testBot.sendInlineQuery(user, "photos");
 
       expect(response.inlineResults).toHaveLength(1);
-      expect(response.inlineResults![0].type).toBe("photo");
+      expect(response.inlineResults?.[0].type).toBe("photo");
     });
 
     it("should handle gif results", async () => {
@@ -252,7 +252,7 @@ describe("Inline Queries", () => {
       const response = await testBot.sendInlineQuery(user, "gifs");
 
       expect(response.inlineResults).toHaveLength(1);
-      expect(response.inlineResults![0].type).toBe("gif");
+      expect(response.inlineResults?.[0].type).toBe("gif");
     });
 
     it("should handle cached results", async () => {
@@ -266,7 +266,7 @@ describe("Inline Queries", () => {
               input_message_content: { message_text: "Cached" },
             },
           ],
-          { cache_time: 300 }
+          { cache_time: 300 },
         );
       });
 
@@ -289,14 +289,14 @@ describe("Inline Queries", () => {
               input_message_content: { message_text: "Personal result" },
             },
           ],
-          { is_personal: true }
+          { is_personal: true },
         );
       });
 
       const user = testBot.createUser({ first_name: "Leo" });
       const response = await testBot.sendInlineQuery(user, "personal");
 
-      expect(response.inlineResults![0].title).toBe("Personal for Leo");
+      expect(response.inlineResults?.[0].title).toBe("Personal for Leo");
     });
   });
 

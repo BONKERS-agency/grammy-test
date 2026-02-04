@@ -1,13 +1,13 @@
-import { Bot, session, GrammyError, HttpError, InputFile } from "grammy";
 import { conversations, createConversation } from "@grammyjs/conversations";
-import type { MyContext, BotConfig } from "./types.js";
-import { createInitialSessionData } from "./types.js";
+import { Bot, GrammyError, HttpError, InputFile, session } from "grammy";
 import {
-  orderConversation,
-  verifyAgeConversation,
   feedbackConversation,
+  orderConversation,
   settingsConversation,
+  verifyAgeConversation,
 } from "./conversations.js";
+import type { BotConfig, MyContext } from "./types.js";
+import { createInitialSessionData } from "./types.js";
 
 /**
  * Create and configure the bot with all handlers.
@@ -28,11 +28,9 @@ import {
  */
 export function createBot(configOrBot: BotConfig | Bot<MyContext>): Bot<MyContext> {
   const isExistingBot = configOrBot instanceof Bot;
-  const bot = isExistingBot
-    ? configOrBot
-    : new Bot<MyContext>(configOrBot.token);
+  const bot = isExistingBot ? configOrBot : new Bot<MyContext>(configOrBot.token);
 
-  const adminIds = (isExistingBot ? [] : configOrBot.adminIds) ?? [];
+  const _adminIds = (isExistingBot ? [] : configOrBot.adminIds) ?? [];
 
   // ============================================================
   // MIDDLEWARE SETUP (only for new bots - tests set up their own)
@@ -43,7 +41,7 @@ export function createBot(configOrBot: BotConfig | Bot<MyContext>): Bot<MyContex
     bot.use(
       session({
         initial: createInitialSessionData,
-      })
+      }),
     );
 
     // Conversations middleware
@@ -76,7 +74,7 @@ export function createBot(configOrBot: BotConfig | Bot<MyContext>): Bot<MyContex
         `I'm a full-featured demo bot. Use /help to see all commands.\n\n` +
         `Your stats:\n` +
         `- Messages: ${ctx.session.messageCount}\n` +
-        `- Commands: ${ctx.session.commandCount}`
+        `- Commands: ${ctx.session.commandCount}`,
     );
   });
 
@@ -88,7 +86,8 @@ export function createBot(configOrBot: BotConfig | Bot<MyContext>): Bot<MyContex
         `/start \\- Start the bot\n` +
         `/help \\- Show this help\n` +
         `/echo \\<text\\> \\- Echo your text\n` +
-        `/stats \\- Show your stats\n\n` +
+        `/stats \\- Show your stats\n` +
+        `/botinfo \\- Show bot info\n\n` +
         `*Conversations*\n` +
         `/order \\- Order a pizza\n` +
         `/verify \\- Age verification\n` +
@@ -96,7 +95,8 @@ export function createBot(configOrBot: BotConfig | Bot<MyContext>): Bot<MyContex
         `/settings \\- User settings\n\n` +
         `*Keyboards*\n` +
         `/menu \\- Inline keyboard demo\n` +
-        `/keyboard \\- Reply keyboard demo\n\n` +
+        `/keyboard \\- Reply keyboard demo\n` +
+        `/webapp \\- Open web app\n\n` +
         `*Media*\n` +
         `/photo \\- Send a photo\n` +
         `/document \\- Send a document\n` +
@@ -104,7 +104,8 @@ export function createBot(configOrBot: BotConfig | Bot<MyContext>): Bot<MyContex
         `*Groups*\n` +
         `/poll \\- Create a poll\n` +
         `/quiz \\- Create a quiz\n` +
-        `/pin \\- Pin a message \\(reply\\)\n\n` +
+        `/pin \\- Pin a message \\(reply\\)\n` +
+        `/giveaway \\<winners\\> \\- Create giveaway\n\n` +
         `*Admin \\(groups\\)*\n` +
         `/ban \\- Ban user \\(reply\\)\n` +
         `/kick \\- Kick user \\(reply\\)\n` +
@@ -113,7 +114,8 @@ export function createBot(configOrBot: BotConfig | Bot<MyContext>): Bot<MyContex
         `/slowmode \\<seconds\\> \\- Set slow mode\n` +
         `/lock \\- Lock chat\n` +
         `/unlock \\- Unlock chat\n` +
-        `/invite \\- Create invite link\n\n` +
+        `/invite \\- Create invite link\n` +
+        `/rejectpassport \\- Reject passport \\(reply\\)\n\n` +
         `*Owner \\(groups\\)*\n` +
         `/promote \\- Promote to admin\n` +
         `/demote \\- Demote admin\n\n` +
@@ -121,11 +123,13 @@ export function createBot(configOrBot: BotConfig | Bot<MyContext>): Bot<MyContex
         `/topic \\<name\\> \\- Create topic\n` +
         `/closetopic \\- Close topic\n` +
         `/reopentopic \\- Reopen topic\n\n` +
-        `*Payments*\n` +
+        `*Premium & Payments*\n` +
+        `/premium \\- Check premium status\n` +
+        `/stars \\- Check star balance\n` +
         `/buy \\- Purchase premium\n\n` +
         `*Inline Mode*\n` +
         `Type @botusername in any chat`,
-      { parse_mode: "MarkdownV2" }
+      { parse_mode: "MarkdownV2" },
     );
   });
 
@@ -141,7 +145,7 @@ export function createBot(configOrBot: BotConfig | Bot<MyContext>): Bot<MyContex
       `Your Statistics:\n\n` +
         `Messages sent: ${ctx.session.messageCount}\n` +
         `Commands used: ${ctx.session.commandCount}\n` +
-        `Notifications: ${ctx.session.notifications ? "Enabled" : "Disabled"}`
+        `Notifications: ${ctx.session.notifications ? "Enabled" : "Disabled"}`,
     );
   });
 
@@ -249,7 +253,7 @@ export function createBot(configOrBot: BotConfig | Bot<MyContext>): Bot<MyContex
       "*Bold* _Italic_ `Code` ~Strikethrough~ __Underline__\n" +
         "||Spoiler|| [Link](https://grammy.dev)\n" +
         "```typescript\nconst bot = new Bot(token);\n```",
-      { parse_mode: "MarkdownV2" }
+      { parse_mode: "MarkdownV2" },
     );
   });
 
@@ -260,8 +264,8 @@ export function createBot(configOrBot: BotConfig | Bot<MyContext>): Bot<MyContex
         "<s>Strikethrough</s> <u>Underline</u>\n" +
         '<span class="tg-spoiler">Spoiler</span>\n' +
         '<a href="https://grammy.dev">Link</a>\n' +
-        "<pre><code class=\"language-typescript\">const bot = new Bot(token);</code></pre>",
-      { parse_mode: "HTML" }
+        '<pre><code class="language-typescript">const bot = new Bot(token);</code></pre>',
+      { parse_mode: "HTML" },
     );
   });
 
@@ -272,10 +276,7 @@ export function createBot(configOrBot: BotConfig | Bot<MyContext>): Bot<MyContex
   bot.command("photo", async (ctx) => {
     ctx.session.commandCount++;
     // Send a photo from URL
-    await ctx.replyWithPhoto(
-      "https://grammy.dev/images/grammY.png",
-      { caption: "grammY Logo" }
-    );
+    await ctx.replyWithPhoto("https://grammy.dev/images/grammY.png", { caption: "grammY Logo" });
   });
 
   bot.command("document", async (ctx) => {
@@ -300,7 +301,7 @@ export function createBot(configOrBot: BotConfig | Bot<MyContext>): Bot<MyContex
     await ctx.reply(
       `Photo received!\n` +
         `Size: ${largest.width}x${largest.height}\n` +
-        `File ID: ${largest.file_id.substring(0, 20)}...`
+        `File ID: ${largest.file_id.substring(0, 20)}...`,
     );
   });
 
@@ -310,7 +311,7 @@ export function createBot(configOrBot: BotConfig | Bot<MyContext>): Bot<MyContex
       `Document received!\n` +
         `Name: ${doc.file_name}\n` +
         `Type: ${doc.mime_type}\n` +
-        `Size: ${doc.file_size ? Math.round(doc.file_size / 1024) + " KB" : "Unknown"}`
+        `Size: ${doc.file_size ? `${Math.round(doc.file_size / 1024)} KB` : "Unknown"}`,
     );
   });
 
@@ -319,7 +320,7 @@ export function createBot(configOrBot: BotConfig | Bot<MyContext>): Bot<MyContex
     await ctx.reply(
       `Video received!\n` +
         `Duration: ${video.duration}s\n` +
-        `Resolution: ${video.width}x${video.height}`
+        `Resolution: ${video.width}x${video.height}`,
     );
   });
 
@@ -329,7 +330,7 @@ export function createBot(configOrBot: BotConfig | Bot<MyContext>): Bot<MyContex
       `Audio received!\n` +
         `Duration: ${audio.duration}s\n` +
         `Title: ${audio.title ?? "Unknown"}\n` +
-        `Artist: ${audio.performer ?? "Unknown"}`
+        `Artist: ${audio.performer ?? "Unknown"}`,
     );
   });
 
@@ -348,7 +349,7 @@ export function createBot(configOrBot: BotConfig | Bot<MyContext>): Bot<MyContex
     await ctx.reply(
       `Sticker received!\n` +
         `Emoji: ${sticker.emoji ?? "None"}\n` +
-        `Set: ${sticker.set_name ?? "None"}`
+        `Set: ${sticker.set_name ?? "None"}`,
     );
   });
 
@@ -362,7 +363,7 @@ export function createBot(configOrBot: BotConfig | Bot<MyContext>): Bot<MyContex
     await ctx.reply(
       `Contact received!\n` +
         `Name: ${contact.first_name} ${contact.last_name ?? ""}\n` +
-        `Phone: ${contact.phone_number}`
+        `Phone: ${contact.phone_number}`,
     );
   });
 
@@ -395,7 +396,7 @@ export function createBot(configOrBot: BotConfig | Bot<MyContext>): Bot<MyContex
         type: "quiz",
         correct_option_id: 1,
         explanation: "grammY is a Telegram Bot framework for TypeScript/JavaScript!",
-      }
+      },
     );
   });
 
@@ -414,9 +415,9 @@ export function createBot(configOrBot: BotConfig | Bot<MyContext>): Bot<MyContex
 
   // Helper to check admin status
   async function isAdmin(ctx: MyContext): Promise<boolean> {
-    if (!ctx.chat || ctx.chat.type === "private") return false;
+    if (!ctx.chat || ctx.chat.type === "private" || !ctx.from) return false;
     try {
-      const member = await ctx.getChatMember(ctx.from!.id);
+      const member = await ctx.getChatMember(ctx.from.id);
       return member.status === "administrator" || member.status === "creator";
     } catch {
       return false;
@@ -424,9 +425,9 @@ export function createBot(configOrBot: BotConfig | Bot<MyContext>): Bot<MyContex
   }
 
   async function isOwner(ctx: MyContext): Promise<boolean> {
-    if (!ctx.chat || ctx.chat.type === "private") return false;
+    if (!ctx.chat || ctx.chat.type === "private" || !ctx.from) return false;
     try {
-      const member = await ctx.getChatMember(ctx.from!.id);
+      const member = await ctx.getChatMember(ctx.from.id);
       return member.status === "creator";
     } catch {
       return false;
@@ -569,12 +570,12 @@ export function createBot(configOrBot: BotConfig | Bot<MyContext>): Bot<MyContex
 
   bot.command("slowmode", async (ctx) => {
     ctx.session.commandCount++;
-    if (!(await isAdmin(ctx))) {
+    if (!(await isAdmin(ctx)) || !ctx.chat) {
       return ctx.reply("This command is for group admins only.");
     }
     const delay = parseInt(ctx.match || "30", 10);
     try {
-      await ctx.api.setChatSlowModeDelay(ctx.chat!.id, delay);
+      await ctx.api.setChatSlowModeDelay(ctx.chat.id, delay);
       await ctx.reply(`Slow mode set to ${delay} seconds.`);
     } catch (e) {
       await ctx.reply(`Failed: ${e instanceof Error ? e.message : "Unknown error"}`);
@@ -708,7 +709,8 @@ export function createBot(configOrBot: BotConfig | Bot<MyContext>): Bot<MyContex
   // ============================================================
 
   bot.on("message_reaction", async (ctx) => {
-    const reaction = ctx.messageReaction!;
+    const reaction = ctx.messageReaction;
+    if (!reaction) return;
     const newReactions = reaction.new_reaction;
 
     // React to likes
@@ -744,7 +746,7 @@ export function createBot(configOrBot: BotConfig | Bot<MyContext>): Bot<MyContex
         title: "Share Bot",
         description: "Share this bot with friends",
         input_message_content: {
-          message_text: "Check out this awesome bot! @" + ctx.me.username,
+          message_text: `Check out this awesome bot! @${ctx.me.username}`,
         },
       },
       {
@@ -762,8 +764,7 @@ export function createBot(configOrBot: BotConfig | Bot<MyContext>): Bot<MyContex
     const filtered = query
       ? results.filter(
           (r) =>
-            r.title.toLowerCase().includes(query) ||
-            r.description.toLowerCase().includes(query)
+            r.title.toLowerCase().includes(query) || r.description.toLowerCase().includes(query),
         )
       : results;
 
@@ -776,6 +777,250 @@ export function createBot(configOrBot: BotConfig | Bot<MyContext>): Bot<MyContex
   bot.on("chosen_inline_result", async (ctx) => {
     const result = ctx.chosenInlineResult;
     console.log(`User ${result.from.first_name} chose inline result: ${result.result_id}`);
+  });
+
+  // ============================================================
+  // BOT SETTINGS
+  // ============================================================
+
+  bot.command("botinfo", async (ctx) => {
+    ctx.session.commandCount++;
+    try {
+      const name = await ctx.api.getMyName();
+      const description = await ctx.api.getMyDescription();
+      const shortDescription = await ctx.api.getMyShortDescription();
+
+      await ctx.reply(
+        `*Bot Information*\n\n` +
+          `Name: ${name.name}\n` +
+          `Description: ${description.description || "Not set"}\n` +
+          `Short Description: ${shortDescription.short_description || "Not set"}`,
+        { parse_mode: "Markdown" },
+      );
+    } catch (e) {
+      await ctx.reply(
+        `Failed to get bot info: ${e instanceof Error ? e.message : "Unknown error"}`,
+      );
+    }
+  });
+
+  // ============================================================
+  // PREMIUM & STARS
+  // ============================================================
+
+  bot.command("premium", async (ctx) => {
+    ctx.session.commandCount++;
+    const user = ctx.from;
+    if (!user) return;
+
+    // Check premium status (in real bot, would check user.is_premium)
+    const isPremium = (user as { is_premium?: boolean }).is_premium ?? false;
+
+    if (isPremium) {
+      await ctx.reply(
+        "You have Premium status! Enjoy exclusive features:\n" +
+          "- Extended message limits\n" +
+          "- Custom emoji reactions\n" +
+          "- Profile badges",
+      );
+    } else {
+      await ctx.reply(
+        "You don't have Premium yet.\n\n" +
+          "Premium users get:\n" +
+          "- Extended message limits\n" +
+          "- Custom emoji reactions\n" +
+          "- Profile badges\n\n" +
+          "Subscribe to Telegram Premium to unlock!",
+      );
+    }
+  });
+
+  bot.command("stars", async (ctx) => {
+    ctx.session.commandCount++;
+    try {
+      const transactions = await ctx.api.getStarTransactions();
+      const totalStars = transactions.transactions.reduce((sum, t) => sum + t.amount, 0);
+
+      await ctx.reply(
+        `*Your Star Balance*\n\n` +
+          `Total: ${totalStars} ⭐\n` +
+          `Transactions: ${transactions.transactions.length}`,
+        { parse_mode: "Markdown" },
+      );
+    } catch (e) {
+      await ctx.reply(
+        `Failed to get star balance: ${e instanceof Error ? e.message : "Unknown error"}`,
+      );
+    }
+  });
+
+  // ============================================================
+  // GIVEAWAYS
+  // ============================================================
+
+  bot.command("giveaway", async (ctx) => {
+    ctx.session.commandCount++;
+    if (!(await isAdmin(ctx))) {
+      return ctx.reply("This command is for group admins only.");
+    }
+
+    const winnerCount = parseInt(ctx.match || "1", 10);
+
+    await ctx.reply(
+      `*New Giveaway!*\n\n` +
+        `Prize: 1 Month Premium\n` +
+        `Winners: ${winnerCount}\n` +
+        `Duration: 7 days\n\n` +
+        `_Giveaway simulation - in production would use createGiveaway API_`,
+      { parse_mode: "Markdown" },
+    );
+  });
+
+  // Handle giveaway completions (simulated updates)
+  bot.on("message", async (ctx, next) => {
+    const msg = ctx.msg as { giveaway_completed?: { winner_count: number } };
+    if (msg.giveaway_completed) {
+      await ctx.reply(
+        `Giveaway completed! ${msg.giveaway_completed.winner_count} winner(s) selected.`,
+      );
+      return;
+    }
+    await next();
+  });
+
+  // ============================================================
+  // WEB APP
+  // ============================================================
+
+  bot.command("webapp", async (ctx) => {
+    ctx.session.commandCount++;
+    await ctx.reply("Open our Web App:", {
+      reply_markup: {
+        inline_keyboard: [
+          [
+            {
+              text: "Open Web App",
+              web_app: { url: "https://example.com/webapp" },
+            },
+          ],
+        ],
+      },
+    });
+  });
+
+  // Handle web app data
+  bot.on("message", async (ctx, next) => {
+    const msg = ctx.msg as { web_app_data?: { button_text: string; data: string } };
+    if (msg.web_app_data) {
+      try {
+        const data = JSON.parse(msg.web_app_data.data);
+        await ctx.reply(
+          `Web App Data Received!\n\n` +
+            `Button: ${msg.web_app_data.button_text}\n` +
+            `Data: ${JSON.stringify(data, null, 2)}`,
+        );
+      } catch {
+        await ctx.reply("Invalid web app data received.");
+      }
+      return;
+    }
+    await next();
+  });
+
+  // ============================================================
+  // STORIES
+  // ============================================================
+
+  // Handle forwarded stories
+  bot.on("message", async (ctx, next) => {
+    const msg = ctx.msg as { story?: { id: number; chat: { id: number; title?: string } } };
+    if (msg.story) {
+      const chatTitle = msg.story.chat.title || "a user";
+      await ctx.reply(`Nice story from ${chatTitle}! Story ID: ${msg.story.id}`);
+      return;
+    }
+    await next();
+  });
+
+  // ============================================================
+  // PASSPORT
+  // ============================================================
+
+  // Handle passport data submissions
+  bot.on("message", async (ctx, next) => {
+    const msg = ctx.msg as { passport_data?: { data: Array<{ type: string }> } };
+    if (msg.passport_data) {
+      const types = msg.passport_data.data.map((d) => d.type).join(", ");
+      await ctx.reply(
+        `Passport data received!\n\n` +
+          `Data types: ${types}\n\n` +
+          `We'll verify your documents shortly.`,
+      );
+      return;
+    }
+    await next();
+  });
+
+  bot.command("rejectpassport", async (ctx) => {
+    ctx.session.commandCount++;
+    const targetId = ctx.message?.reply_to_message?.from?.id;
+    if (!targetId) {
+      return ctx.reply("Reply to a user's message to reject their passport data.");
+    }
+    try {
+      await ctx.api.setPassportDataErrors(targetId, [
+        {
+          source: "data",
+          type: "personal_details",
+          field_name: "first_name",
+          data_hash: "sample_hash",
+          message: "Please provide your legal name",
+        },
+      ]);
+      await ctx.reply("Passport data errors sent to user.");
+    } catch (e) {
+      await ctx.reply(`Failed: ${e instanceof Error ? e.message : "Unknown error"}`);
+    }
+  });
+
+  // ============================================================
+  // BUSINESS
+  // ============================================================
+
+  // Handle business messages
+  bot.on("message", async (ctx, next) => {
+    const msg = ctx.msg as { business_connection_id?: string };
+    if (msg.business_connection_id) {
+      await ctx.reply(
+        `Business message received!\n\n` +
+          `Connection ID: ${msg.business_connection_id}\n\n` +
+          `_This message was sent through a business account._`,
+        { parse_mode: "Markdown" },
+      );
+      return;
+    }
+    await next();
+  });
+
+  // ============================================================
+  // CHAT BOOSTS
+  // ============================================================
+
+  bot.on("chat_boost", async (ctx) => {
+    const boost = ctx.chatBoost;
+    if (!boost) return;
+    const userName =
+      boost.boost.source.type === "premium"
+        ? (boost.boost.source as { user?: { first_name: string } }).user?.first_name || "Someone"
+        : "Someone";
+
+    await ctx.api.sendMessage(boost.chat.id, `Thank you ${userName} for boosting the chat!`);
+  });
+
+  bot.on("removed_chat_boost", async (ctx) => {
+    const removedBoost = ctx.removedChatBoost;
+    if (!removedBoost) return;
+    await ctx.api.sendMessage(removedBoost.chat.id, "A boost has been removed from this chat.");
   });
 
   // ============================================================
@@ -794,7 +1039,7 @@ export function createBot(configOrBot: BotConfig | Bot<MyContext>): Bot<MyContex
         photo_url: "https://grammy.dev/images/grammY.png",
         photo_width: 512,
         photo_height: 512,
-      }
+      },
     );
   });
 
@@ -811,11 +1056,12 @@ export function createBot(configOrBot: BotConfig | Bot<MyContext>): Bot<MyContex
   });
 
   bot.on("message:successful_payment", async (ctx) => {
-    const payment = ctx.message.successful_payment!;
+    const payment = ctx.message.successful_payment;
+    if (!payment) return;
     await ctx.reply(
       `Payment received!\n\n` +
         `Amount: ${payment.total_amount} ${payment.currency}\n` +
-        `Thank you for your purchase! Your premium features are now active.`
+        `Thank you for your purchase! Your premium features are now active.`,
     );
   });
 
@@ -824,7 +1070,8 @@ export function createBot(configOrBot: BotConfig | Bot<MyContext>): Bot<MyContex
   // ============================================================
 
   bot.on("chat_member", async (ctx) => {
-    const update = ctx.chatMember!;
+    const update = ctx.chatMember;
+    if (!update) return;
     const oldStatus = update.old_chat_member.status;
     const newStatus = update.new_chat_member.status;
     const user = update.new_chat_member.user;
@@ -834,10 +1081,7 @@ export function createBot(configOrBot: BotConfig | Bot<MyContext>): Bot<MyContex
       (oldStatus === "left" || oldStatus === "kicked") &&
       (newStatus === "member" || newStatus === "administrator")
     ) {
-      await ctx.api.sendMessage(
-        update.chat.id,
-        `Welcome to the group, ${user.first_name}!`
-      );
+      await ctx.api.sendMessage(update.chat.id, `Welcome to the group, ${user.first_name}!`);
     }
 
     // User left
@@ -850,13 +1094,14 @@ export function createBot(configOrBot: BotConfig | Bot<MyContext>): Bot<MyContex
   });
 
   bot.on("chat_join_request", async (ctx) => {
-    const request = ctx.chatJoinRequest!;
+    const request = ctx.chatJoinRequest;
+    if (!request) return;
     // Auto-approve join requests (you might want to add verification)
     try {
       await ctx.approveChatJoinRequest(request.from.id);
       await ctx.api.sendMessage(
         request.from.id,
-        `Your request to join "${request.chat.title}" has been approved!`
+        `Your request to join "${request.chat.title}" has been approved!`,
       );
     } catch {
       // User might have blocked the bot
@@ -870,10 +1115,7 @@ export function createBot(configOrBot: BotConfig | Bot<MyContext>): Bot<MyContex
   bot.on("message:text", async (ctx) => {
     // Don't respond to commands or keyboard buttons
     const text = ctx.message.text;
-    if (
-      text.startsWith("/") ||
-      ["Help", "Stats", "Settings", "Cancel"].includes(text)
-    ) {
+    if (text.startsWith("/") || ["Help", "Stats", "Settings", "Cancel"].includes(text)) {
       return;
     }
 
@@ -901,4 +1143,3 @@ export function createBot(configOrBot: BotConfig | Bot<MyContext>): Bot<MyContex
 
   return bot;
 }
-

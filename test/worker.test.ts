@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { TestBot, WorkerSimulator } from "../src/index.js";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { TestBot, type WorkerSimulator } from "../src/index.js";
 
 /**
  * Tests for the WorkerSimulator which allows testing bots that delegate
@@ -31,7 +31,7 @@ describe("Worker/Queue Support", () => {
     });
 
     it("should send message as worker (outside handler context)", async () => {
-      const user = testBot.createUser({ first_name: "Alice" });
+      testBot.createUser({ first_name: "Alice" });
       const chat = testBot.createChat({ type: "private" });
 
       // Worker sends a message directly (not from handler)
@@ -41,7 +41,7 @@ describe("Worker/Queue Support", () => {
     });
 
     it("should send multiple messages as worker", async () => {
-      const user = testBot.createUser({ first_name: "Bob" });
+      testBot.createUser({ first_name: "Bob" });
       const chat = testBot.createChat({ type: "private" });
 
       const response = await worker.sendMessages(chat.id, [
@@ -179,9 +179,21 @@ describe("Worker/Queue Support", () => {
 
       // Queue multiple jobs
       const jobs = [
-        worker.queueJob(testBot.server.updateFactory.createTextMessage(user, chat, "job1"), chat.id, { index: 1 }),
-        worker.queueJob(testBot.server.updateFactory.createTextMessage(user, chat, "job2"), chat.id, { index: 2 }),
-        worker.queueJob(testBot.server.updateFactory.createTextMessage(user, chat, "job3"), chat.id, { index: 3 }),
+        worker.queueJob(
+          testBot.server.updateFactory.createTextMessage(user, chat, "job1"),
+          chat.id,
+          { index: 1 },
+        ),
+        worker.queueJob(
+          testBot.server.updateFactory.createTextMessage(user, chat, "job2"),
+          chat.id,
+          { index: 2 },
+        ),
+        worker.queueJob(
+          testBot.server.updateFactory.createTextMessage(user, chat, "job3"),
+          chat.id,
+          { index: 3 },
+        ),
       ];
 
       expect(worker.pendingCount).toBe(3);
@@ -191,7 +203,10 @@ describe("Worker/Queue Support", () => {
       for (const job of jobs) {
         await worker.processQueuedJob(job.id, async (api, queuedJob) => {
           results.push(`processed_${(queuedJob.payload as { index: number }).index}`);
-          await api.sendMessage(queuedJob.chatId, `Done ${(queuedJob.payload as { index: number }).index}`);
+          await api.sendMessage(
+            queuedJob.chatId,
+            `Done ${(queuedJob.payload as { index: number }).index}`,
+          );
         });
       }
 
@@ -207,14 +222,14 @@ describe("Worker/Queue Support", () => {
       const job = worker.queueJob(
         testBot.server.updateFactory.createTextMessage(user, chat, "will fail"),
         chat.id,
-        { shouldFail: true }
+        { shouldFail: true },
       );
 
       // Job throws error during processing
       await expect(
         worker.processQueuedJob(job.id, async () => {
           throw new Error("Job failed!");
-        })
+        }),
       ).rejects.toThrow("Job failed!");
 
       // Job should still be in queue (not marked as processed)
@@ -222,9 +237,9 @@ describe("Worker/Queue Support", () => {
     });
 
     it("should throw error for non-existent job", async () => {
-      await expect(
-        worker.processQueuedJob("non_existent_job", async () => {})
-      ).rejects.toThrow("Job not found: non_existent_job");
+      await expect(worker.processQueuedJob("non_existent_job", async () => {})).rejects.toThrow(
+        "Job not found: non_existent_job",
+      );
     });
   });
 
@@ -243,7 +258,11 @@ describe("Worker/Queue Support", () => {
       const chat = testBot.createChat({ type: "private" });
       const user = testBot.createUser({ first_name: "Ivy" });
 
-      const job = worker.queueJob(testBot.server.updateFactory.createTextMessage(user, chat, "test"), chat.id, { key: "value" });
+      const job = worker.queueJob(
+        testBot.server.updateFactory.createTextMessage(user, chat, "test"),
+        chat.id,
+        { key: "value" },
+      );
 
       const retrieved = worker.getJob(job.id);
       expect(retrieved).toBeDefined();
@@ -301,7 +320,7 @@ describe("Worker/Queue Support", () => {
       // worker processes and sends result
 
       const chat = testBot.createChat({ type: "private" });
-      const user = testBot.createUser({ first_name: "Leo" });
+      testBot.createUser({ first_name: "Leo" });
 
       // Simulate receiving a photo (handler would queue for processing)
       // Then worker processes and responds

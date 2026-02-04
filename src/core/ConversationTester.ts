@@ -1,7 +1,6 @@
-import type { Chat, User, Message } from "grammy/types";
-import type { TestBot } from "./TestBot.js";
+import type { Chat, Message, User } from "grammy/types";
 import type { BotResponse } from "./BotResponse.js";
-import type { SendMessageOptions } from "./TestBot.js";
+import type { SendMessageOptions, TestBot } from "./TestBot.js";
 
 /**
  * Helper for testing multi-step conversations.
@@ -66,7 +65,12 @@ export class ConversationTester {
    * Returns a BotResponse containing all bot actions.
    */
   async click(callbackData: string, fromMessage?: Message): Promise<BotResponse> {
-    const response = await this.testBot.clickButton(this.user, this.chat, callbackData, fromMessage);
+    const response = await this.testBot.clickButton(
+      this.user,
+      this.chat,
+      callbackData,
+      fromMessage,
+    );
     this.stepCount++;
     this.lastResponse = response;
     return response;
@@ -138,18 +142,14 @@ export class ConversationTester {
    * Assert that the bot sent a specific message at some point.
    */
   hasBotMessage(text: string): boolean {
-    return this.getBotMessages().some(
-      (m) => "text" in m && m.text === text
-    );
+    return this.getBotMessages().some((m) => "text" in m && m.text === text);
   }
 
   /**
    * Assert that the bot sent a message containing specific text.
    */
   hasBotMessageContaining(substring: string): boolean {
-    return this.getBotMessages().some(
-      (m) => "text" in m && m.text?.includes(substring)
-    );
+    return this.getBotMessages().some((m) => "text" in m && m.text?.includes(substring));
   }
 }
 
@@ -176,7 +176,7 @@ export class ConversationTester {
 export function createConversationTester(
   testBot: TestBot,
   user: User,
-  chat: Chat
+  chat: Chat,
 ): ConversationTester {
   return new ConversationTester(testBot, user, chat);
 }

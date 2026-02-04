@@ -1,17 +1,15 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { Context, session, SessionFlavor } from "grammy";
 import {
   type Conversation,
   type ConversationFlavor,
   conversations,
   createConversation,
 } from "@grammyjs/conversations";
+import { type Context, type SessionFlavor, session } from "grammy";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createConversationTester, TestBot } from "../src/index.js";
 
 // Define session and context types
-interface SessionData {
-  // Add any session data your bot needs
-}
+type SessionData = Record<string, never>;
 
 type MyContext = Context & SessionFlavor<SessionData> & ConversationFlavor;
 type MyConversation = Conversation<MyContext>;
@@ -26,7 +24,7 @@ describe("Conversations Plugin", () => {
     testBot.use(
       session({
         initial: (): SessionData => ({}),
-      })
+      }),
     );
 
     // Set up conversations plugin
@@ -44,7 +42,7 @@ describe("Conversations Plugin", () => {
       async function greeting(conversation: MyConversation, ctx: MyContext) {
         await ctx.reply("What is your name?");
         const { message } = await conversation.waitFor("message:text");
-        await ctx.reply(`Hello, ${message!.text}! Nice to meet you.`);
+        await ctx.reply(`Hello, ${message?.text ?? ""}! Nice to meet you.`);
       }
 
       // Register the conversation
@@ -72,11 +70,11 @@ describe("Conversations Plugin", () => {
       async function orderPizza(conversation: MyConversation, ctx: MyContext) {
         await ctx.reply("What size pizza? (small/medium/large)");
         const sizeCtx = await conversation.waitFor("message:text");
-        const size = sizeCtx.message!.text;
+        const size = sizeCtx.message?.text ?? "";
 
         await ctx.reply("What toppings would you like?");
         const toppingsCtx = await conversation.waitFor("message:text");
-        const toppings = toppingsCtx.message!.text;
+        const toppings = toppingsCtx.message?.text ?? "";
 
         await ctx.reply(`Order confirmed: ${size} pizza with ${toppings}!`);
       }
@@ -100,7 +98,7 @@ describe("Conversations Plugin", () => {
 
       await convo.say("pepperoni and mushrooms");
       expect(convo.getLastBotText()).toBe(
-        "Order confirmed: large pizza with pepperoni and mushrooms!"
+        "Order confirmed: large pizza with pepperoni and mushrooms!",
       );
     });
   });
@@ -113,9 +111,9 @@ describe("Conversations Plugin", () => {
         while (age === null) {
           await ctx.reply("Please enter your age (must be 18+):");
           const response = await conversation.waitFor("message:text");
-          const parsed = parseInt(response.message!.text!, 10);
+          const parsed = parseInt(response.message?.text ?? "", 10);
 
-          if (isNaN(parsed)) {
+          if (Number.isNaN(parsed)) {
             await ctx.reply("That's not a valid number!");
           } else if (parsed < 18) {
             await ctx.reply("You must be 18 or older.");
@@ -162,7 +160,7 @@ describe("Conversations Plugin", () => {
         await ctx.reply("Question 1: What's your favorite color?");
         const q1 = await conversation.waitFor("message:text");
 
-        if (q1.message!.text === "/cancel") {
+        if (q1.message?.text === "/cancel") {
           await ctx.reply("Survey cancelled.");
           return;
         }
@@ -170,7 +168,7 @@ describe("Conversations Plugin", () => {
         await ctx.reply("Question 2: What's your favorite food?");
         const q2 = await conversation.waitFor("message:text");
 
-        if (q2.message!.text === "/cancel") {
+        if (q2.message?.text === "/cancel") {
           await ctx.reply("Survey cancelled.");
           return;
         }
@@ -237,8 +235,10 @@ describe("Conversations Plugin", () => {
       async function dynamic(conversation: MyConversation, ctx: MyContext) {
         await ctx.reply("Enter a number:");
         const { message } = await conversation.waitFor("message:text");
-        const num = parseInt(message!.text!, 10);
-        await ctx.reply(`You entered the number ${num}, which is ${num % 2 === 0 ? "even" : "odd"}.`);
+        const num = parseInt(message?.text ?? "", 10);
+        await ctx.reply(
+          `You entered the number ${num}, which is ${num % 2 === 0 ? "even" : "odd"}.`,
+        );
       }
 
       testBot.use(createConversation(dynamic));

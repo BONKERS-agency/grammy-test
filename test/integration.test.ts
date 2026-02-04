@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { TestBot } from "../src/index.js";
 
 describe("Integration Scenarios", () => {
@@ -25,12 +25,12 @@ describe("Integration Scenarios", () => {
               [{ text: "Basic Plan - $5", callback_data: "buy_basic" }],
             ],
           },
-        })
+        }),
       );
 
       // Handle product selection
       testBot.callbackQuery(/^buy_/, async (ctx) => {
-        const plan = ctx.callbackQuery.data!.replace("buy_", "");
+        const plan = (ctx.callbackQuery.data ?? "").replace("buy_", "");
         events.push(`selected_${plan}`);
 
         await ctx.answerCallbackQuery();
@@ -43,7 +43,7 @@ describe("Integration Scenarios", () => {
 
       // Handle confirmation - send invoice
       testBot.callbackQuery(/^confirm_/, async (ctx) => {
-        const plan = ctx.callbackQuery.data!.replace("confirm_", "");
+        const plan = (ctx.callbackQuery.data ?? "").replace("confirm_", "");
         const amount = plan === "premium" ? 1000 : 500;
         events.push("invoice_sent");
 
@@ -73,7 +73,12 @@ describe("Integration Scenarios", () => {
       expect(shopResponse.keyboard?.inline).toHaveLength(2);
 
       // Step 2: Select premium plan
-      const selectResponse = await testBot.clickButton(user, chat, "buy_premium", shopResponse.messages[0]);
+      const selectResponse = await testBot.clickButton(
+        user,
+        chat,
+        "buy_premium",
+        shopResponse.messages[0],
+      );
       expect(selectResponse.editedText).toContain("premium");
 
       // Step 3: Confirm purchase
@@ -81,7 +86,7 @@ describe("Integration Scenarios", () => {
         user,
         chat,
         "confirm_premium",
-        selectResponse.editedMessages[0]
+        selectResponse.editedMessages[0],
       );
       expect(confirmResponse.invoice).toBeDefined();
       expect(confirmResponse.invoice?.total_amount).toBe(1000);
@@ -106,7 +111,12 @@ describe("Integration Scenarios", () => {
       expect(paymentResponse.text).toContain("Thank you");
 
       // Verify all steps executed
-      expect(events).toEqual(["selected_premium", "invoice_sent", "pre_checkout", "payment_success"]);
+      expect(events).toEqual([
+        "selected_premium",
+        "invoice_sent",
+        "pre_checkout",
+        "payment_success",
+      ]);
     });
   });
 
@@ -154,24 +164,30 @@ describe("Integration Scenarios", () => {
 
       // Warning 1
       const warn1 = await testBot.sendCommand(admin, group, "/warn", {
-        replyToMessageId: troubleMsg.sentMessage!.message_id,
+        replyToMessageId: troubleMsg.sentMessage?.message_id,
       });
       expect(warn1.text).toContain("Warning 1/3");
-      expect(testBot.server.memberState.getMember(group.id, troublemaker.id)?.status).toBe("member");
+      expect(testBot.server.memberState.getMember(group.id, troublemaker.id)?.status).toBe(
+        "member",
+      );
 
       // Warning 2 - should mute
       const warn2 = await testBot.sendCommand(admin, group, "/warn", {
-        replyToMessageId: troubleMsg.sentMessage!.message_id,
+        replyToMessageId: troubleMsg.sentMessage?.message_id,
       });
       expect(warn2.text).toContain("muted");
-      expect(testBot.server.memberState.getMember(group.id, troublemaker.id)?.status).toBe("restricted");
+      expect(testBot.server.memberState.getMember(group.id, troublemaker.id)?.status).toBe(
+        "restricted",
+      );
 
       // Warning 3 - should ban
       const warn3 = await testBot.sendCommand(admin, group, "/warn", {
-        replyToMessageId: troubleMsg.sentMessage!.message_id,
+        replyToMessageId: troubleMsg.sentMessage?.message_id,
       });
       expect(warn3.text).toContain("banned");
-      expect(testBot.server.memberState.getMember(group.id, troublemaker.id)?.status).toBe("kicked");
+      expect(testBot.server.memberState.getMember(group.id, troublemaker.id)?.status).toBe(
+        "kicked",
+      );
     });
 
     it("should handle appeal workflow", async () => {
@@ -192,7 +208,7 @@ describe("Integration Scenarios", () => {
         }
 
         const [userId, decision] = args;
-        const appeal = appeals.get(parseInt(userId));
+        const appeal = appeals.get(parseInt(userId, 10));
 
         if (!appeal) {
           return ctx.reply("No appeal found for this user.");
@@ -201,7 +217,7 @@ describe("Integration Scenarios", () => {
         appeal.status = decision;
 
         if (decision === "approve") {
-          await ctx.api.unbanChatMember(ctx.chat.id, parseInt(userId));
+          await ctx.api.unbanChatMember(ctx.chat.id, parseInt(userId, 10));
           return ctx.reply(`Appeal approved. User ${userId} has been unbanned.`);
         }
 
@@ -228,7 +244,11 @@ describe("Integration Scenarios", () => {
       expect(appeals.get(banned.id)?.status).toBe("pending");
 
       // Admin approves
-      const reviewResponse = await testBot.sendCommand(admin, group, `/review ${banned.id} approve`);
+      const reviewResponse = await testBot.sendCommand(
+        admin,
+        group,
+        `/review ${banned.id} approve`,
+      );
       expect(reviewResponse.text).toContain("approved");
       expect(testBot.server.memberState.getMember(group.id, banned.id)?.status).toBe("left");
     });
@@ -278,17 +298,22 @@ describe("Integration Scenarios", () => {
       });
 
       const admin = testBot.createUser({ first_name: "Admin" });
-      const voters = Array.from({ length: 5 }, (_, i) => testBot.createUser({ first_name: `Voter${i}` }));
+      const voters = Array.from({ length: 5 }, (_, i) =>
+        testBot.createUser({ first_name: `Voter${i}` }),
+      );
       const group = testBot.createChat({ type: "group", title: "Test Group" });
 
       testBot.setOwner(group, admin);
-      voters.forEach((v) => testBot.setMember(group, v));
+      for (const v of voters) {
+        testBot.setMember(group, v);
+      }
 
       // Create poll
       const pollResponse = await testBot.sendCommand(admin, group, "/vote Team lunch location?");
       expect(pollResponse.poll?.question).toBe("Team lunch location?");
 
-      const poll = pollResponse.poll!;
+      expect(pollResponse.poll).toBeDefined();
+      const poll = pollResponse.poll;
 
       // Users vote (3 for A, 2 for B)
       await testBot.vote(voters[0], poll, [0]);
@@ -315,7 +340,7 @@ describe("Integration Scenarios", () => {
       });
 
       testBot.command("closetopic", async (ctx) => {
-        const threadId = parseInt(ctx.match || "0");
+        const threadId = parseInt(ctx.match || "0", 10);
         if (!threadId) {
           return ctx.reply("Usage: /closetopic <thread_id>");
         }
@@ -325,7 +350,7 @@ describe("Integration Scenarios", () => {
       });
 
       testBot.command("reopentopic", async (ctx) => {
-        const threadId = parseInt(ctx.match || "0");
+        const threadId = parseInt(ctx.match || "0", 10);
         if (!threadId) {
           return ctx.reply("Usage: /reopentopic <thread_id>");
         }
@@ -346,7 +371,7 @@ describe("Integration Scenarios", () => {
 
       // Extract thread ID from response
       const threadIdMatch = createResponse.text?.match(/ID: (\d+)/);
-      const threadId = threadIdMatch ? parseInt(threadIdMatch[1]) : 0;
+      const threadId = threadIdMatch ? parseInt(threadIdMatch[1], 10) : 0;
       expect(threadId).toBeGreaterThan(0);
 
       // Verify topic exists
@@ -378,7 +403,9 @@ describe("Integration Scenarios", () => {
 
       testBot.command("listinvites", async (ctx) => {
         const links = testBot.server.chatState.getInviteLinks(ctx.chat.id);
-        const list = links.map((l) => `- ${l.name}: ${l.usage_count}/${l.member_limit || "∞"} uses`).join("\n");
+        const list = links
+          .map((l) => `- ${l.name}: ${l.usage_count}/${l.member_limit || "∞"} uses`)
+          .join("\n");
         await ctx.reply(`Invite links:\n${list || "None"}`);
       });
 
@@ -407,7 +434,9 @@ describe("Integration Scenarios", () => {
       expect(linkUrl).toBeTruthy();
 
       // Simulate users joining
-      const newUsers = Array.from({ length: 3 }, (_, i) => testBot.createUser({ first_name: `NewUser${i}` }));
+      const newUsers = Array.from({ length: 3 }, (_, i) =>
+        testBot.createUser({ first_name: `NewUser${i}` }),
+      );
 
       for (const user of newUsers) {
         await testBot.simulateJoinViaLink(user, group, linkUrl);
@@ -460,7 +489,12 @@ describe("Integration Scenarios", () => {
       await testBot.sendCommand(user, chat, "/edit Second edit");
       await testBot.sendCommand(user, chat, "/edit Final version");
 
-      expect(editHistory).toEqual(["Original content", "First edit", "Second edit", "Final version"]);
+      expect(editHistory).toEqual([
+        "Original content",
+        "First edit",
+        "Second edit",
+        "Final version",
+      ]);
     });
   });
 
@@ -483,7 +517,8 @@ describe("Integration Scenarios", () => {
       });
 
       testBot.callbackQuery(/^(like|dislike)$/, async (ctx) => {
-        const msg = ctx.callbackQuery.message!;
+        const msg = ctx.callbackQuery.message;
+        if (!msg) return;
         const data = postLikes.get(msg.message_id);
         if (!data) return;
 
@@ -521,11 +556,15 @@ describe("Integration Scenarios", () => {
       });
 
       const poster = testBot.createUser({ first_name: "Poster" });
-      const likers = Array.from({ length: 3 }, (_, i) => testBot.createUser({ first_name: `Liker${i}` }));
+      const likers = Array.from({ length: 3 }, (_, i) =>
+        testBot.createUser({ first_name: `Liker${i}` }),
+      );
       const chat = testBot.createChat({ type: "group", title: "Test" });
 
       testBot.setMember(chat, poster);
-      likers.forEach((l) => testBot.setMember(chat, l));
+      for (const l of likers) {
+        testBot.setMember(chat, l);
+      }
 
       // Create post
       const postResponse = await testBot.sendCommand(poster, chat, "/post Check this out!");
@@ -591,20 +630,21 @@ describe("Integration Scenarios", () => {
             registrations.set(userId, reg);
             return ctx.reply("Almost done! Enter your age:");
 
-          case "age":
-            const age = parseInt(ctx.message.text);
-            if (isNaN(age) || age < 13 || age > 120) {
+          case "age": {
+            const age = parseInt(ctx.message.text, 10);
+            if (Number.isNaN(age) || age < 13 || age > 120) {
               return ctx.reply("Invalid age. Please enter a number between 13 and 120:");
             }
             reg.data.age = age;
             reg.step = "complete";
             registrations.set(userId, reg);
             return ctx.reply(
-              `Registration complete!\nName: ${reg.data.name}\nEmail: ${reg.data.email}\nAge: ${reg.data.age}`
+              `Registration complete!\nName: ${reg.data.name}\nEmail: ${reg.data.email}\nAge: ${reg.data.age}`,
             );
+          }
 
           default:
-            return ctx.reply('Send /register to start registration or /help for more info.');
+            return ctx.reply("Send /register to start registration or /help for more info.");
         }
       });
 

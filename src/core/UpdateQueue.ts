@@ -54,7 +54,7 @@ export class UpdateQueue {
   async getUpdates(
     offset: number = 0,
     limit: number = 100,
-    timeout: number = 0
+    timeout: number = 0,
   ): Promise<Update[]> {
     // If aborted, return empty immediately
     if (this.aborted) {

@@ -1,5 +1,5 @@
-import type { Update } from "grammy/types";
 import type { UpdateSource, UpdateSupplier } from "@grammyjs/runner";
+import type { Update } from "grammy/types";
 
 // Compatible AbortSignal type that works with both native and polyfilled versions
 interface CompatibleAbortSignal {
@@ -239,7 +239,7 @@ export class TestUpdateSource implements UpdateSource<Update> {
     while (this.processedCount < this.pushedCount) {
       if (Date.now() - startTime > timeoutMs) {
         throw new Error(
-          `Timeout waiting for updates. Pushed: ${this.pushedCount}, Processed: ${this.processedCount}`
+          `Timeout waiting for updates. Pushed: ${this.pushedCount}, Processed: ${this.processedCount}`,
         );
       }
       await new Promise((resolve) => setTimeout(resolve, 10));

@@ -1,11 +1,12 @@
 import type {
   Chat,
-  ChatPermissions,
+  ChatBoostSource,
   ChatInviteLink,
-  Message,
-  User,
+  ChatPermissions,
   ForumTopic,
+  Message,
   ReactionType,
+  User,
 } from "grammy/types";
 
 /**
@@ -29,6 +30,16 @@ export interface StoredForumTopic {
   topic: ForumTopic;
   isClosed: boolean;
   isPinned: boolean;
+}
+
+/**
+ * Stored chat boost.
+ */
+export interface StoredChatBoost {
+  boost_id: string;
+  add_date: number;
+  expiration_date: number;
+  source: ChatBoostSource;
 }
 
 /**
@@ -71,6 +82,8 @@ export interface ChatStateData {
     type: "all" | "some";
     reactions?: ReactionType[];
   };
+  /** Chat boosts */
+  boosts: Map<string, StoredChatBoost>;
 }
 
 /**
@@ -122,6 +135,7 @@ export class ChatState {
       isForum: false,
       isLocked: false,
       hasPhoto: false,
+      boosts: new Map(),
     };
   }
 
@@ -239,7 +253,7 @@ export class ChatState {
    */
   setAvailableReactions(
     chatId: number,
-    reactions: { type: "all" | "some"; reactions?: ReactionType[] }
+    reactions: { type: "all" | "some"; reactions?: ReactionType[] },
   ): boolean {
     const state = this.chats.get(chatId);
     if (state) {
@@ -364,7 +378,7 @@ export class ChatState {
       subscription_period?: number;
       subscriptionPrice?: number;
       subscription_price?: number;
-    } = {}
+    } = {},
   ): StoredInviteLink | undefined {
     const state = this.chats.get(chatId);
     if (!state) return undefined;
@@ -404,7 +418,7 @@ export class ChatState {
       expireDate?: number;
       memberLimit?: number;
       createsJoinRequest?: boolean;
-    }
+    },
   ): StoredInviteLink | undefined {
     const state = this.chats.get(chatId);
     if (!state) return undefined;
@@ -415,7 +429,8 @@ export class ChatState {
     if (options.name !== undefined) link.name = options.name;
     if (options.expireDate !== undefined) link.expire_date = options.expireDate;
     if (options.memberLimit !== undefined) link.member_limit = options.memberLimit;
-    if (options.createsJoinRequest !== undefined) link.creates_join_request = options.createsJoinRequest;
+    if (options.createsJoinRequest !== undefined)
+      link.creates_join_request = options.createsJoinRequest;
 
     return link;
   }
@@ -571,7 +586,7 @@ export class ChatState {
       topic: {
         message_thread_id: 1,
         name: "General",
-        icon_color: 0x6FB9F0,
+        icon_color: 0x6fb9f0,
       },
       isClosed: false,
       isPinned: true,
@@ -588,11 +603,19 @@ export class ChatState {
    */
   createForumTopic(
     chatId: number,
-    nameOrOptions: string | { name: string; icon_color?: number; iconColor?: number; iconCustomEmojiId?: string; is_closed?: boolean },
+    nameOrOptions:
+      | string
+      | {
+          name: string;
+          icon_color?: number;
+          iconColor?: number;
+          iconCustomEmojiId?: string;
+          is_closed?: boolean;
+        },
     options: {
       iconColor?: number;
       iconCustomEmojiId?: string;
-    } = {}
+    } = {},
   ): ForumTopic | undefined {
     const state = this.chats.get(chatId);
     if (!state || !state.isForum) return undefined;
@@ -618,7 +641,7 @@ export class ChatState {
     const topic: ForumTopic = {
       message_thread_id: messageThreadId,
       name,
-      icon_color: iconColor ?? 0x6FB9F0,
+      icon_color: iconColor ?? 0x6fb9f0,
       icon_custom_emoji_id: iconCustomEmojiId,
     };
 
@@ -640,7 +663,7 @@ export class ChatState {
     options: {
       name?: string;
       iconCustomEmojiId?: string;
-    }
+    },
   ): boolean {
     const state = this.chats.get(chatId);
     if (!state) return false;
@@ -703,7 +726,10 @@ export class ChatState {
    * Get a forum topic.
    * Returns a merged object with topic properties and state flags.
    */
-  getForumTopic(chatId: number, messageThreadId: number): (ForumTopic & { is_closed: boolean; isPinned: boolean }) | undefined {
+  getForumTopic(
+    chatId: number,
+    messageThreadId: number,
+  ): (ForumTopic & { is_closed: boolean; isPinned: boolean }) | undefined {
     const state = this.chats.get(chatId);
     const stored = state?.forumTopics.get(messageThreadId);
     if (!stored) return undefined;
@@ -786,6 +812,70 @@ export class ChatState {
     return this.chats.get(chatId)?.isLocked ?? false;
   }
 
+  // === Boost Management ===
+
+  /** Boost ID counter */
+  private boostIdCounter = 1;
+
+  /**
+   * Add a boost to a chat.
+   */
+  addBoost(
+    chatId: number,
+    source: ChatBoostSource,
+    expirationDate?: number,
+  ): StoredChatBoost | undefined {
+    const state = this.chats.get(chatId);
+    if (!state) return undefined;
+
+    const now = Math.floor(Date.now() / 1000);
+    const boost: StoredChatBoost = {
+      boost_id: `boost_${this.boostIdCounter++}`,
+      add_date: now,
+      expiration_date: expirationDate ?? now + 30 * 24 * 60 * 60, // 30 days default
+      source,
+    };
+
+    state.boosts.set(boost.boost_id, boost);
+    return boost;
+  }
+
+  /**
+   * Remove a boost from a chat.
+   */
+  removeBoost(chatId: number, boostId: string): StoredChatBoost | undefined {
+    const state = this.chats.get(chatId);
+    if (!state) return undefined;
+
+    const boost = state.boosts.get(boostId);
+    if (boost) {
+      state.boosts.delete(boostId);
+    }
+    return boost;
+  }
+
+  /**
+   * Get all boosts for a chat.
+   */
+  getBoosts(chatId: number): StoredChatBoost[] {
+    const state = this.chats.get(chatId);
+    return state ? Array.from(state.boosts.values()) : [];
+  }
+
+  /**
+   * Get the boost count for a chat.
+   */
+  getBoostCount(chatId: number): number {
+    return this.chats.get(chatId)?.boosts.size ?? 0;
+  }
+
+  /**
+   * Get a specific boost.
+   */
+  getBoost(chatId: number, boostId: string): StoredChatBoost | undefined {
+    return this.chats.get(chatId)?.boosts.get(boostId);
+  }
+
   // === State Management ===
 
   /**
@@ -795,6 +885,7 @@ export class ChatState {
     this.chats.clear();
     this.inviteLinkCounter = 1;
     this.topicIdCounter = 1;
+    this.boostIdCounter = 1;
   }
 
   /**

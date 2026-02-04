@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { TestBot } from "../src/index.js";
 
 describe("Restrictions & Slow Mode", () => {
@@ -202,7 +202,9 @@ describe("Restrictions & Slow Mode", () => {
       testBot.command("slowmode", async (ctx) => {
         // setChatSlowModeDelay may not be available in all grammY versions
         // Use the raw API call instead
-        await ctx.api.raw.setChatSlowModeDelay({ chat_id: ctx.chat!.id, slow_mode_delay: 30 });
+        if (ctx.chat) {
+          await ctx.api.raw.setChatSlowModeDelay({ chat_id: ctx.chat.id, slow_mode_delay: 30 });
+        }
         await ctx.reply("Slow mode: 30 seconds.");
       });
 
@@ -225,7 +227,9 @@ describe("Restrictions & Slow Mode", () => {
       testBot.command("slowoff", async (ctx) => {
         // setChatSlowModeDelay may not be available in all grammY versions
         // Use the raw API call instead
-        await ctx.api.raw.setChatSlowModeDelay({ chat_id: ctx.chat!.id, slow_mode_delay: 0 });
+        if (ctx.chat) {
+          await ctx.api.raw.setChatSlowModeDelay({ chat_id: ctx.chat.id, slow_mode_delay: 0 });
+        }
         await ctx.reply("Slow mode disabled.");
       });
 
@@ -294,7 +298,8 @@ describe("Restrictions & Slow Mode", () => {
       });
 
       testBot.command("checkme", async (ctx) => {
-        const member = await ctx.getChatMember(ctx.from!.id);
+        if (!ctx.from) return;
+        const member = await ctx.getChatMember(ctx.from.id);
         if (member.status === "restricted") {
           await ctx.reply("You are restricted.");
         } else {
@@ -318,7 +323,8 @@ describe("Restrictions & Slow Mode", () => {
       });
 
       testBot.command("perms", async (ctx) => {
-        const member = await ctx.getChatMember(ctx.from!.id);
+        if (!ctx.from) return;
+        const member = await ctx.getChatMember(ctx.from.id);
         if (member.status === "restricted") {
           const perms: string[] = [];
           if (member.can_send_messages) perms.push("messages");

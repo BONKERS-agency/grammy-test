@@ -1,6 +1,6 @@
-import type { Update, Message, Chat } from "grammy/types";
 import type { Api } from "grammy";
-import { BotResponse, createBotResponse } from "./BotResponse.js";
+import type { Update } from "grammy/types";
+import { type BotResponse, createBotResponse } from "./BotResponse.js";
 import type { TelegramServer } from "./TelegramServer.js";
 
 /**
@@ -92,7 +92,7 @@ export class WorkerSimulator {
    */
   async processJob(
     chatId: number,
-    worker: (api: Api, chatId: number) => Promise<void>
+    worker: (api: Api, chatId: number) => Promise<void>,
   ): Promise<BotResponse> {
     const response = createBotResponse();
     this.server.setCurrentResponse(response);
@@ -111,7 +111,7 @@ export class WorkerSimulator {
    */
   async processQueuedJob(
     jobId: string,
-    worker: (api: Api, job: QueuedJob) => Promise<void>
+    worker: (api: Api, job: QueuedJob) => Promise<void>,
   ): Promise<BotResponse> {
     const job = this.jobs.get(jobId);
     if (!job) {
@@ -139,7 +139,7 @@ export class WorkerSimulator {
   async sendMessage(
     chatId: number,
     text: string,
-    options?: Parameters<Api["sendMessage"]>[2]
+    options?: Parameters<Api["sendMessage"]>[2],
   ): Promise<BotResponse> {
     return this.processJob(chatId, async (api) => {
       await api.sendMessage(chatId, text, options);
@@ -149,10 +149,7 @@ export class WorkerSimulator {
   /**
    * Send multiple messages as a worker.
    */
-  async sendMessages(
-    chatId: number,
-    texts: string[]
-  ): Promise<BotResponse> {
+  async sendMessages(chatId: number, texts: string[]): Promise<BotResponse> {
     return this.processJob(chatId, async (api) => {
       for (const text of texts) {
         await api.sendMessage(chatId, text);
@@ -167,7 +164,7 @@ export class WorkerSimulator {
     chatId: number,
     messageId: number,
     text: string,
-    options?: Parameters<Api["editMessageText"]>[3]
+    options?: Parameters<Api["editMessageText"]>[3],
   ): Promise<BotResponse> {
     return this.processJob(chatId, async (api) => {
       await api.editMessageText(chatId, messageId, text, options);
@@ -220,9 +217,6 @@ export class WorkerSimulator {
 /**
  * Create a worker simulator.
  */
-export function createWorkerSimulator(
-  server: TelegramServer,
-  api: Api
-): WorkerSimulator {
+export function createWorkerSimulator(server: TelegramServer, api: Api): WorkerSimulator {
   return new WorkerSimulator(server, api);
 }

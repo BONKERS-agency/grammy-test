@@ -1,4 +1,4 @@
-import type { Transformer, RawApi } from "grammy";
+import type { RawApi, Transformer } from "grammy";
 import type { TelegramServer } from "./TelegramServer.js";
 
 export interface ApiCallRecord {
@@ -18,9 +18,9 @@ export interface ApiCallRecord {
  */
 export function createTestTransformer(
   server: TelegramServer,
-  callLog: ApiCallRecord[]
+  callLog: ApiCallRecord[],
 ): Transformer {
-  return (async (prev, method, payload, signal) => {
+  return (async (_prev, method, payload, _signal) => {
     const record: ApiCallRecord = {
       method,
       payload: payload as Record<string, unknown>,
@@ -32,7 +32,7 @@ export function createTestTransformer(
       // Route the API call to our simulated Telegram server
       const result = await server.handleApiCall(
         method as keyof RawApi,
-        payload as Record<string, unknown>
+        payload as Record<string, unknown>,
       );
 
       record.response = result;

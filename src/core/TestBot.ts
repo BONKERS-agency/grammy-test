@@ -1,25 +1,24 @@
-import { Bot, type Context, type Api } from "grammy";
+import { Bot, type Context } from "grammy";
 import type {
   Chat,
+  ChatAdministratorRights,
+  ChatMember,
   Message,
+  ReactionType,
+  Update,
   User,
   UserFromGetMe,
-  Update,
-  ChatAdministratorRights,
-  ReactionType,
-  ChatMember,
 } from "grammy/types";
-import { TelegramServer } from "./TelegramServer.js";
-import { createTestTransformer, type ApiCallRecord } from "./TestClient.js";
+import { type BotResponse, createBotResponse } from "./BotResponse.js";
 import { FetchInterceptor } from "./FetchInterceptor.js";
-import { createMockFetch } from "./MockFetch.js";
-import { BotResponse, createBotResponse } from "./BotResponse.js";
-import { UpdateQueue } from "./UpdateQueue.js";
-import { WebhookSimulator, type WebhookAdapter, type WebhookOptions } from "./WebhookSimulator.js";
-import { TestUpdateSource } from "./RunnerSupport.js";
-import { WorkerSimulator } from "./WorkerSimulator.js";
 import type { ParseMode } from "./MarkdownParser.js";
-import type { StoredInviteLink } from "./ChatState.js";
+import { createMockFetch } from "./MockFetch.js";
+import { TestUpdateSource } from "./RunnerSupport.js";
+import { TelegramServer } from "./TelegramServer.js";
+import { type ApiCallRecord, createTestTransformer } from "./TestClient.js";
+import { UpdateQueue } from "./UpdateQueue.js";
+import { type WebhookAdapter, type WebhookOptions, WebhookSimulator } from "./WebhookSimulator.js";
+import { WorkerSimulator } from "./WorkerSimulator.js";
 
 const DEFAULT_BOT_INFO: UserFromGetMe = {
   id: 123456789,
@@ -226,7 +225,7 @@ export class TestBot<C extends Context = Context> extends Bot<C> {
     user: User,
     chat: Chat,
     text: string,
-    options: SendMessageOptions = {}
+    options: SendMessageOptions = {},
   ): Promise<BotResponse> {
     const response = createBotResponse();
     this.server.setCurrentResponse(response);
@@ -264,7 +263,7 @@ export class TestBot<C extends Context = Context> extends Bot<C> {
     chat: Chat,
     commandOrText: string,
     argsOrOptions?: string | SendMessageOptions,
-    options: SendMessageOptions = {}
+    options: SendMessageOptions = {},
   ): Promise<BotResponse> {
     const response = createBotResponse();
     this.server.setCurrentResponse(response);
@@ -329,7 +328,7 @@ export class TestBot<C extends Context = Context> extends Bot<C> {
     user: User,
     chat: Chat,
     callbackData: string,
-    fromMessage?: Message
+    fromMessage?: Message,
   ): Promise<BotResponse> {
     const response = createBotResponse();
     this.server.setCurrentResponse(response);
@@ -366,7 +365,7 @@ export class TestBot<C extends Context = Context> extends Bot<C> {
     newText: string,
     options: {
       parseMode?: "Markdown" | "MarkdownV2" | "HTML";
-    } = {}
+    } = {},
   ): Promise<BotResponse> {
     const response = createBotResponse();
     this.server.setCurrentResponse(response);
@@ -377,7 +376,7 @@ export class TestBot<C extends Context = Context> extends Bot<C> {
         chat,
         messageId,
         newText,
-        { parseMode: options.parseMode }
+        { parseMode: options.parseMode },
       );
       await this.handleUpdate(update);
     } finally {
@@ -394,7 +393,10 @@ export class TestBot<C extends Context = Context> extends Bot<C> {
   async sendInlineQuery(
     user: User,
     query: string,
-    options: { offset?: string; chatType?: "sender" | "private" | "group" | "supergroup" | "channel" } = {}
+    options: {
+      offset?: string;
+      chatType?: "sender" | "private" | "group" | "supergroup" | "channel";
+    } = {},
   ): Promise<BotResponse> {
     const response = createBotResponse();
     this.server.setCurrentResponse(response);
@@ -416,20 +418,12 @@ export class TestBot<C extends Context = Context> extends Bot<C> {
    * @param resultId The ID of the chosen result
    * @param query The query that was used (optional)
    */
-  async chooseInlineResult(
-    user: User,
-    resultId: string,
-    query: string = ""
-  ): Promise<BotResponse> {
+  async chooseInlineResult(user: User, resultId: string, query: string = ""): Promise<BotResponse> {
     const response = createBotResponse();
     this.server.setCurrentResponse(response);
 
     try {
-      const update = this.server.updateFactory.createChosenInlineResult(
-        user,
-        resultId,
-        query
-      );
+      const update = this.server.updateFactory.createChosenInlineResult(user, resultId, query);
       await this.handleUpdate(update);
     } finally {
       this.server.setCurrentResponse(null);
@@ -445,7 +439,7 @@ export class TestBot<C extends Context = Context> extends Bot<C> {
     user: User,
     chat: Chat,
     photo: { width: number; height: number; content?: Buffer | Uint8Array; fileSize?: number },
-    options: { caption?: string; parseMode?: ParseMode; replyToMessageId?: number } = {}
+    options: { caption?: string; parseMode?: ParseMode; replyToMessageId?: number } = {},
   ): Promise<BotResponse> {
     const response = createBotResponse();
     this.server.setCurrentResponse(response);
@@ -475,20 +469,31 @@ export class TestBot<C extends Context = Context> extends Bot<C> {
   async sendDocument(
     user: User,
     chat: Chat,
-    document: { fileName: string; mimeType: string; content?: Buffer | Uint8Array; fileSize?: number },
-    options: { caption?: string; parseMode?: ParseMode; replyToMessageId?: number } = {}
+    document: {
+      fileName: string;
+      mimeType: string;
+      content?: Buffer | Uint8Array;
+      fileSize?: number;
+    },
+    options: { caption?: string; parseMode?: ParseMode; replyToMessageId?: number } = {},
   ): Promise<BotResponse> {
     const response = createBotResponse();
     this.server.setCurrentResponse(response);
 
     try {
-      const update = this.server.simulateDocumentMessage(user, chat, document.fileName, document.mimeType, {
-        content: document.content,
-        fileSize: document.fileSize,
-        caption: options.caption,
-        parseMode: options.parseMode,
-        replyToMessageId: options.replyToMessageId,
-      });
+      const update = this.server.simulateDocumentMessage(
+        user,
+        chat,
+        document.fileName,
+        document.mimeType,
+        {
+          content: document.content,
+          fileSize: document.fileSize,
+          caption: options.caption,
+          parseMode: options.parseMode,
+          replyToMessageId: options.replyToMessageId,
+        },
+      );
       if (update.message) {
         response.sentMessage = update.message;
       }
@@ -509,7 +514,7 @@ export class TestBot<C extends Context = Context> extends Bot<C> {
   async vote(
     user: User,
     pollOrId: { id: string } | string,
-    optionIds: number[]
+    optionIds: number[],
   ): Promise<BotResponse> {
     const pollId = typeof pollOrId === "string" ? pollOrId : pollOrId.id;
     const response = createBotResponse();
@@ -536,7 +541,7 @@ export class TestBot<C extends Context = Context> extends Bot<C> {
     user: User,
     chat: Chat,
     messageId: number,
-    reactions: ReactionType[]
+    reactions: ReactionType[],
   ): Promise<BotResponse> {
     const response = createBotResponse();
     this.server.setCurrentResponse(response);
@@ -558,7 +563,7 @@ export class TestBot<C extends Context = Context> extends Bot<C> {
     user: User,
     chat: Chat,
     audio: { duration: number; title?: string; performer?: string },
-    options: { caption?: string; replyToMessageId?: number } = {}
+    options: { caption?: string; replyToMessageId?: number } = {},
   ): Promise<BotResponse> {
     const response = createBotResponse();
     this.server.setCurrentResponse(response);
@@ -588,16 +593,23 @@ export class TestBot<C extends Context = Context> extends Bot<C> {
     user: User,
     chat: Chat,
     video: { width: number; height: number; duration: number },
-    options: { caption?: string; replyToMessageId?: number } = {}
+    options: { caption?: string; replyToMessageId?: number } = {},
   ): Promise<BotResponse> {
     const response = createBotResponse();
     this.server.setCurrentResponse(response);
 
     try {
-      const update = this.server.simulateVideoMessage(user, chat, video.width, video.height, video.duration, {
-        caption: options.caption,
-        replyToMessageId: options.replyToMessageId,
-      });
+      const update = this.server.simulateVideoMessage(
+        user,
+        chat,
+        video.width,
+        video.height,
+        video.duration,
+        {
+          caption: options.caption,
+          replyToMessageId: options.replyToMessageId,
+        },
+      );
       if (update.message) {
         response.sentMessage = update.message;
       }
@@ -616,7 +628,7 @@ export class TestBot<C extends Context = Context> extends Bot<C> {
     user: User,
     chat: Chat,
     voice: { duration: number },
-    options: { caption?: string; replyToMessageId?: number } = {}
+    options: { caption?: string; replyToMessageId?: number } = {},
   ): Promise<BotResponse> {
     const response = createBotResponse();
     this.server.setCurrentResponse(response);
@@ -643,7 +655,7 @@ export class TestBot<C extends Context = Context> extends Bot<C> {
   async sendSticker(
     user: User,
     chat: Chat,
-    sticker: { emoji?: string; setName?: string }
+    sticker: { emoji?: string; setName?: string },
   ): Promise<BotResponse> {
     const response = createBotResponse();
     this.server.setCurrentResponse(response);
@@ -670,7 +682,7 @@ export class TestBot<C extends Context = Context> extends Bot<C> {
   async sendContact(
     user: User,
     chat: Chat,
-    contact: { phoneNumber: string; firstName: string; lastName?: string }
+    contact: { phoneNumber: string; firstName: string; lastName?: string },
   ): Promise<BotResponse> {
     const response = createBotResponse();
     this.server.setCurrentResponse(response);
@@ -698,13 +710,18 @@ export class TestBot<C extends Context = Context> extends Bot<C> {
   async sendLocation(
     user: User,
     chat: Chat,
-    location: { latitude: number; longitude: number }
+    location: { latitude: number; longitude: number },
   ): Promise<BotResponse> {
     const response = createBotResponse();
     this.server.setCurrentResponse(response);
 
     try {
-      const update = this.server.simulateLocationMessage(user, chat, location.latitude, location.longitude);
+      const update = this.server.simulateLocationMessage(
+        user,
+        chat,
+        location.latitude,
+        location.longitude,
+      );
       if (update.message) {
         response.sentMessage = update.message;
       }
@@ -722,7 +739,7 @@ export class TestBot<C extends Context = Context> extends Bot<C> {
   async sendVenue(
     user: User,
     chat: Chat,
-    venue: { latitude: number; longitude: number; title: string; address: string }
+    venue: { latitude: number; longitude: number; title: string; address: string },
   ): Promise<BotResponse> {
     const response = createBotResponse();
     this.server.setCurrentResponse(response);
@@ -768,7 +785,7 @@ export class TestBot<C extends Context = Context> extends Bot<C> {
           post_code: string;
         };
       };
-    }
+    },
   ): Promise<BotResponse> {
     const response = createBotResponse();
     this.server.setCurrentResponse(response);
@@ -800,7 +817,7 @@ export class TestBot<C extends Context = Context> extends Bot<C> {
         email?: string;
         phone_number?: string;
       };
-    }
+    },
   ): Promise<BotResponse> {
     const response = createBotResponse();
     this.server.setCurrentResponse(response);
@@ -831,7 +848,7 @@ export class TestBot<C extends Context = Context> extends Bot<C> {
         street_line2: string;
         post_code: string;
       };
-    }
+    },
   ): Promise<BotResponse> {
     const response = createBotResponse();
     this.server.setCurrentResponse(response);
@@ -855,7 +872,7 @@ export class TestBot<C extends Context = Context> extends Bot<C> {
     reactions: Array<{
       type: ReactionType;
       total_count: number;
-    }>
+    }>,
   ): Promise<BotResponse> {
     const response = createBotResponse();
     this.server.setCurrentResponse(response);
@@ -877,13 +894,18 @@ export class TestBot<C extends Context = Context> extends Bot<C> {
     chat: Chat,
     messageId: number,
     newReactions: ReactionType[],
-    oldReactions: ReactionType[]
+    oldReactions: ReactionType[],
   ): Promise<BotResponse> {
     const response = createBotResponse();
     this.server.setCurrentResponse(response);
 
     try {
-      const update = this.server.simulateAnonymousReaction(chat, messageId, newReactions, oldReactions);
+      const update = this.server.simulateAnonymousReaction(
+        chat,
+        messageId,
+        newReactions,
+        oldReactions,
+      );
       await this.handleUpdate(update);
     } finally {
       this.server.setCurrentResponse(null);
@@ -895,11 +917,7 @@ export class TestBot<C extends Context = Context> extends Bot<C> {
   /**
    * Simulate a user joining via an invite link.
    */
-  async simulateJoinViaLink(
-    user: User,
-    chat: Chat,
-    inviteLink: string
-  ): Promise<BotResponse> {
+  async simulateJoinViaLink(user: User, chat: Chat, inviteLink: string): Promise<BotResponse> {
     const response = createBotResponse();
     this.server.setCurrentResponse(response);
 
@@ -917,9 +935,15 @@ export class TestBot<C extends Context = Context> extends Bot<C> {
         if (link?.is_revoked) {
           response._setError({ code: 400, description: "Bad Request: invite link revoked" });
         } else if (link?.member_limit && link.usage_count >= link.member_limit) {
-          response._setError({ code: 400, description: "Bad Request: invite link member limit reached" });
+          response._setError({
+            code: 400,
+            description: "Bad Request: invite link member limit reached",
+          });
         } else {
-          response._setError({ code: 400, description: "Bad Request: invite link expired or invalid" });
+          response._setError({
+            code: 400,
+            description: "Bad Request: invite link expired or invalid",
+          });
         }
         return response;
       }
@@ -933,10 +957,14 @@ export class TestBot<C extends Context = Context> extends Bot<C> {
       // If link creates join request, add to pending
       if (link.creates_join_request) {
         this.server.chatState.addJoinRequest(chat.id, inviteLink, user);
+        const chatData = this.server.chatState.get(chat.id);
+        if (!chatData) {
+          throw new Error("Chat not found");
+        }
         const update = {
-          update_id: this.server["updateIdCounter"]++,
+          update_id: this.server.getNextUpdateId(),
           chat_join_request: {
-            chat: this.server.chatState.get(chat.id)!.chat,
+            chat: chatData.chat,
             from: user,
             user_chat_id: user.id,
             date: Math.floor(Date.now() / 1000),
@@ -952,10 +980,14 @@ export class TestBot<C extends Context = Context> extends Bot<C> {
         this.server.memberState.setMember(chat.id, user, "member");
 
         // Send chat_member update
+        const chatData = this.server.chatState.get(chat.id);
+        if (!chatData) {
+          throw new Error("Chat not found");
+        }
         const update: Update = {
-          update_id: this.server["updateIdCounter"]++,
+          update_id: this.server.getNextUpdateId(),
           chat_member: {
-            chat: this.server.chatState.get(chat.id)!.chat,
+            chat: chatData.chat,
             from: user,
             date: Math.floor(Date.now() / 1000),
             old_chat_member: {
@@ -981,11 +1013,7 @@ export class TestBot<C extends Context = Context> extends Bot<C> {
   /**
    * Simulate a user requesting to join via an invite link.
    */
-  async simulateJoinRequest(
-    user: User,
-    chat: Chat,
-    inviteLink: string
-  ): Promise<BotResponse> {
+  async simulateJoinRequest(user: User, chat: Chat, inviteLink: string): Promise<BotResponse> {
     const response = createBotResponse();
     this.server.setCurrentResponse(response);
 
@@ -998,10 +1026,14 @@ export class TestBot<C extends Context = Context> extends Bot<C> {
 
       this.server.chatState.addJoinRequest(chat.id, inviteLink, user);
 
+      const chatData = this.server.chatState.get(chat.id);
+      if (!chatData) {
+        throw new Error("Chat not found");
+      }
       const update = {
-        update_id: this.server["updateIdCounter"]++,
+        update_id: this.server.getNextUpdateId(),
         chat_join_request: {
-          chat: this.server.chatState.get(chat.id)!.chat,
+          chat: chatData.chat,
           from: user,
           user_chat_id: user.id,
           date: Math.floor(Date.now() / 1000),
@@ -1024,7 +1056,7 @@ export class TestBot<C extends Context = Context> extends Bot<C> {
   setOwner(
     chat: Chat,
     user: User,
-    options: { customTitle?: string; isAnonymous?: boolean } = {}
+    options: { customTitle?: string; isAnonymous?: boolean } = {},
   ): void {
     this.server.chatState.getOrCreate(chat);
     this.server.memberState.setOwner(chat.id, user, options);
@@ -1037,7 +1069,7 @@ export class TestBot<C extends Context = Context> extends Bot<C> {
     chat: Chat,
     user: User,
     rights: Partial<ChatAdministratorRights>,
-    options: { customTitle?: string; isAnonymous?: boolean } = {}
+    options: { customTitle?: string; isAnonymous?: boolean } = {},
   ): void {
     this.server.chatState.getOrCreate(chat);
     this.server.memberState.setAdmin(chat.id, user, rights, options);
@@ -1120,7 +1152,7 @@ export class TestBot<C extends Context = Context> extends Bot<C> {
    * Note: This overrides Bot.start() to provide test-specific behavior.
    * Unlike real polling, it processes updates from the UpdateQueue.
    */
-  override async start(options?: { drop_pending_updates?: boolean }): Promise<void> {
+  override async start(_options?: { drop_pending_updates?: boolean }): Promise<void> {
     if (this._isPolling) {
       throw new Error("Bot is already polling");
     }
@@ -1162,9 +1194,9 @@ export class TestBot<C extends Context = Context> extends Bot<C> {
    * Returns a BotResponse capturing what the bot did in response.
    */
   async simulateWebhook(
-    adapter: WebhookAdapter,
+    _adapter: WebhookAdapter,
     update: Update,
-    options: WebhookOptions = {}
+    _options: WebhookOptions = {},
   ): Promise<BotResponse> {
     const response = createBotResponse();
     this.server.setCurrentResponse(response);
@@ -1185,14 +1217,18 @@ export class TestBot<C extends Context = Context> extends Bot<C> {
   async simulateWebhookRaw(
     adapter: WebhookAdapter,
     update: Update,
-    options: WebhookOptions = {}
-  ): Promise<{ statusCode: number; headers: Record<string, string>; body: string | Buffer | null }> {
+    options: WebhookOptions = {},
+  ): Promise<{
+    statusCode: number;
+    headers: Record<string, string>;
+    body: string | Buffer | null;
+  }> {
     const response = createBotResponse();
     this.server.setCurrentResponse(response);
 
     // For Express-style adapters
     if (adapter === "express") {
-      const { req, res } = this.webhookSimulator.createExpressRequest(update, options);
+      const { res } = this.webhookSimulator.createExpressRequest(update, options);
       await this.handleUpdate(update);
       this.server.setCurrentResponse(null);
       return {
@@ -1225,7 +1261,6 @@ export class TestBot<C extends Context = Context> extends Bot<C> {
   getApiCalls(): ApiCallRecord[] {
     return [...this.apiCalls];
   }
-
 
   // === Runner Support ===
 
@@ -1411,7 +1446,7 @@ class ConversationHelper<C extends Context> {
  */
 export function createTestBot<C extends Context = Context>(
   bot: Bot<C>,
-  config: TestBotConfig = {}
+  config: TestBotConfig = {},
 ): TestBot<C> {
   const testBot = new TestBot<C>(config);
 
@@ -1440,4 +1475,4 @@ export function createTestBot<C extends Context = Context>(
   return testBot;
 }
 
-export { type BotResponse } from "./BotResponse.js";
+export type { BotResponse } from "./BotResponse.js";

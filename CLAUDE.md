@@ -14,6 +14,9 @@ grammY bot testing framework - simulates Telegram interactions without API calls
 - TypeScript strict mode
 - Async/await for all async operations
 - Export types alongside implementations
+- Run `npm run lint` before committing (Biome)
+- No explicit `any` - use proper types
+- No non-null assertions (`!`) - use optional chaining (`?.`)
 
 ### Testing
 - All features must have corresponding tests
