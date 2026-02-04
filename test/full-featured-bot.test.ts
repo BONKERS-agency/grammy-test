@@ -848,4 +848,289 @@ describe("Full-Featured Bot", () => {
       expect(boostCount).toBe(0);
     });
   });
+
+  describe("Concurrent Operations (Race Condition Safety)", () => {
+    it("handles multiple users sending /start concurrently with isolated responses", async () => {
+      const users = Array.from({ length: 10 }, (_, i) =>
+        testBot.createUser({ id: 5000 + i, first_name: `User${i}` }),
+      );
+      const chat = testBot.createChat({ type: "group", title: "Test Group" });
+
+      for (const user of users) {
+        testBot.setMember(chat, user);
+      }
+
+      // All users send /start concurrently
+      const responses = await Promise.all(
+        users.map((user) => testBot.sendCommand(user, chat, "/start")),
+      );
+
+      // Each response should contain the personalized greeting for that user
+      for (let i = 0; i < responses.length; i++) {
+        const response = responses[i];
+        const user = users[i];
+
+        expect(response.messages).toHaveLength(1);
+        expect(response.text).toContain(`Welcome, ${user.first_name}!`);
+      }
+    });
+
+    it("handles multiple users sending /echo concurrently with isolated responses", async () => {
+      const users = Array.from({ length: 10 }, (_, i) =>
+        testBot.createUser({ id: 6000 + i, first_name: `Echoer${i}` }),
+      );
+      const chat = testBot.createChat({ type: "group", title: "Echo Group" });
+
+      for (const user of users) {
+        testBot.setMember(chat, user);
+      }
+
+      // All users send different echo messages concurrently
+      const responses = await Promise.all(
+        users.map((user, i) =>
+          testBot.sendCommand(user, chat, `/echo Message from ${user.first_name} #${i}`),
+        ),
+      );
+
+      // Each response should echo the correct message
+      for (let i = 0; i < responses.length; i++) {
+        const response = responses[i];
+        const user = users[i];
+
+        expect(response.messages).toHaveLength(1);
+        expect(response.text).toBe(`Echo: Message from ${user.first_name} #${i}`);
+      }
+    });
+
+    it("handles concurrent inline button clicks with isolated callback answers", async () => {
+      const users = Array.from({ length: 5 }, (_, i) =>
+        testBot.createUser({ id: 7000 + i, first_name: `Clicker${i}` }),
+      );
+      const chat = testBot.createChat({ type: "group", title: "Button Group" });
+
+      for (const user of users) {
+        testBot.setMember(chat, user);
+      }
+
+      // Each user creates their own menu to avoid message edit conflicts
+      const menuResponses = await Promise.all(
+        users.map((user) => testBot.sendCommand(user, chat, "/menu")),
+      );
+
+      // All users click "Option A" on their own menus concurrently
+      const clickResponses = await Promise.all(
+        users.map((user, i) =>
+          testBot.clickButton(user, chat, "menu_a", menuResponses[i].messages[0]),
+        ),
+      );
+
+      // Each response should have the correct callback answer
+      for (const response of clickResponses) {
+        expect(response.callbackAnswer?.text).toBe("You chose A!");
+        expect(response.editedText).toBe("You selected Option A");
+      }
+    });
+
+    it("handles concurrent inline queries with isolated results", async () => {
+      const users = Array.from({ length: 5 }, (_, i) =>
+        testBot.createUser({ id: 8000 + i, first_name: `Searcher${i}` }),
+      );
+
+      // All users send empty inline queries concurrently (returns all results)
+      const responses = await Promise.all(users.map((user) => testBot.sendInlineQuery(user, "")));
+
+      // Each response should have all inline results (empty query returns all)
+      for (const response of responses) {
+        expect(response.inlineResults).toBeDefined();
+        // The bot returns 3 inline results: Hello World, Current Time, Help Text
+        expect(response.inlineResults?.length).toBe(3);
+      }
+    });
+
+    it("handles concurrent text messages with isolated responses", async () => {
+      const users = Array.from({ length: 10 }, (_, i) =>
+        testBot.createUser({ id: 9000 + i, first_name: `Texter${i}` }),
+      );
+      const chat = testBot.createChat({ type: "group", title: "Text Group" });
+
+      for (const user of users) {
+        testBot.setMember(chat, user);
+      }
+
+      // All users send different text messages concurrently
+      const responses = await Promise.all(
+        users.map((user, i) =>
+          testBot.sendMessage(user, chat, `Hello from ${user.first_name} message #${i}`),
+        ),
+      );
+
+      // Each response should contain the echoed message for that user
+      for (let i = 0; i < responses.length; i++) {
+        const response = responses[i];
+        const user = users[i];
+
+        expect(response.messages).toHaveLength(1);
+        expect(response.text).toContain("You said:");
+        expect(response.text).toContain(`Hello from ${user.first_name} message #${i}`);
+      }
+    });
+
+    it("handles concurrent admin commands with isolated responses", async () => {
+      const admin = testBot.createUser({ id: 10000, first_name: "Admin" });
+      const targets = Array.from({ length: 5 }, (_, i) =>
+        testBot.createUser({ id: 10100 + i, first_name: `Target${i}` }),
+      );
+      const group = testBot.createChat({ type: "supergroup", title: "Admin Group" });
+
+      testBot.setOwner(group, admin);
+      testBot.setBotAdmin(group, { can_restrict_members: true });
+
+      for (const target of targets) {
+        testBot.setMember(group, target);
+      }
+
+      // Each target sends a message
+      const targetMessages = await Promise.all(
+        targets.map((target) => testBot.sendMessage(target, group, "Message")),
+      );
+
+      // Admin mutes all targets concurrently (each mute is a separate request)
+      const muteResponses = await Promise.all(
+        targetMessages.map((msg, i) =>
+          testBot.sendCommand(admin, group, `/mute ${60 + i}`, {
+            replyToMessageId: msg.sentMessage?.message_id,
+          }),
+        ),
+      );
+
+      // Each response should indicate the correct mute duration
+      for (let i = 0; i < muteResponses.length; i++) {
+        const response = muteResponses[i];
+        expect(response.text).toBe(`User muted for ${60 + i} seconds.`);
+      }
+
+      // All targets should be muted
+      for (const target of targets) {
+        const member = testBot.server.memberState.getMember(group.id, target.id);
+        expect(member?.restrictedPermissions?.can_send_messages).toBe(false);
+      }
+    });
+
+    it("handles concurrent pre-checkout queries with isolated responses", async () => {
+      const users = Array.from({ length: 5 }, (_, i) =>
+        testBot.createUser({ id: 11000 + i, first_name: `Buyer${i}` }),
+      );
+
+      // All users send pre-checkout queries concurrently
+      const responses = await Promise.all(
+        users.map((user, i) =>
+          testBot.simulatePreCheckout(user, {
+            id: `precheckout_${user.id}`,
+            currency: "XTR",
+            total_amount: 100 + i,
+            invoice_payload: "premium_30_days",
+          }),
+        ),
+      );
+
+      // All should be approved
+      for (const response of responses) {
+        expect(response.preCheckoutAnswer?.ok).toBe(true);
+      }
+    });
+
+    it("handles concurrent successful payments with isolated responses", async () => {
+      const users = Array.from({ length: 5 }, (_, i) =>
+        testBot.createUser({ id: 12000 + i, first_name: `Payer${i}` }),
+      );
+      const chats = users.map((user) =>
+        testBot.createChat({ type: "private", id: 12500 + user.id }),
+      );
+
+      // All payments processed concurrently
+      const responses = await Promise.all(
+        users.map((user, i) =>
+          testBot.simulateSuccessfulPayment(user, chats[i], {
+            currency: "XTR",
+            total_amount: 100 + i * 10,
+            invoice_payload: "premium_30_days",
+            telegram_payment_charge_id: `charge_${user.id}`,
+            provider_payment_charge_id: `provider_${user.id}`,
+          }),
+        ),
+      );
+
+      // Each response should contain the correct payment amount
+      for (let i = 0; i < responses.length; i++) {
+        const response = responses[i];
+        const amount = 100 + i * 10;
+
+        expect(response.text).toContain("Payment received!");
+        expect(response.text).toContain(`${amount} XTR`);
+      }
+    });
+
+    it("handles mixed concurrent operations (commands, messages, callbacks)", async () => {
+      const users = Array.from({ length: 6 }, (_, i) =>
+        testBot.createUser({ id: 13000 + i, first_name: `Mixed${i}` }),
+      );
+      const chat = testBot.createChat({ type: "group", title: "Mixed Group" });
+
+      for (const user of users) {
+        testBot.setMember(chat, user);
+      }
+
+      // First create menus for button clicks
+      const menuResponses = await Promise.all([
+        testBot.sendCommand(users[4], chat, "/menu"),
+        testBot.sendCommand(users[5], chat, "/menu"),
+      ]);
+
+      // Now run mixed operations concurrently
+      const responses = await Promise.all([
+        testBot.sendCommand(users[0], chat, "/start"),
+        testBot.sendCommand(users[1], chat, "/echo Concurrent echo"),
+        testBot.sendMessage(users[2], chat, "Concurrent text message"),
+        testBot.sendCommand(users[3], chat, "/help"),
+        testBot.clickButton(users[4], chat, "menu_a", menuResponses[0].messages[0]),
+        testBot.clickButton(users[5], chat, "menu_b", menuResponses[1].messages[0]),
+      ]);
+
+      // Verify each response is correct and isolated
+      expect(responses[0].text).toContain("Welcome, Mixed0!");
+      expect(responses[1].text).toBe("Echo: Concurrent echo");
+      expect(responses[2].text).toContain("You said:");
+      expect(responses[2].text).toContain("Concurrent text message");
+      expect(responses[3].text).toContain("Available Commands");
+      expect(responses[4].callbackAnswer?.text).toBe("You chose A!");
+      expect(responses[5].callbackAnswer?.text).toBe("You chose B!");
+    });
+
+    it("processes updates truly concurrently with processUpdatesConcurrently", async () => {
+      const users = Array.from({ length: 10 }, (_, i) =>
+        testBot.createUser({ id: 14000 + i, first_name: `Concurrent${i}` }),
+      );
+      const chat = testBot.createChat({ type: "group", title: "Concurrent Group" });
+
+      for (const user of users) {
+        testBot.setMember(chat, user);
+      }
+
+      // Create updates directly
+      const updates = users.map((user, i) =>
+        testBot.server.simulateUserMessage(user, chat, `Concurrent message ${i}`),
+      );
+
+      // Process all updates concurrently
+      const responses = await testBot.processUpdatesConcurrently(updates);
+
+      // Each response should be isolated
+      for (let i = 0; i < responses.length; i++) {
+        const response = responses[i];
+        expect(response.messages).toHaveLength(1);
+        expect(response.text).toContain("You said:");
+        expect(response.text).toContain(`Concurrent message ${i}`);
+      }
+    });
+  });
 });

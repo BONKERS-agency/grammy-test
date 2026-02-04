@@ -874,6 +874,101 @@ const links = testBot.server.chatState.getInviteLinks(chatId);
 expect(links[0].member_limit).toBe(100);
 ```
 
+## Concurrent Testing
+
+The framework supports safe concurrent testing. Each `BotResponse` tracks only the messages and API calls made during that specific request, even when multiple updates run simultaneously.
+
+### Running Updates in Parallel
+
+```typescript
+it("handles concurrent commands", async () => {
+  const user1 = testBot.createUser({ first_name: "Alice" });
+  const user2 = testBot.createUser({ first_name: "Bob" });
+  const chat = testBot.createChat({ type: "private" });
+
+  // Run multiple commands in parallel
+  const [response1, response2] = await Promise.all([
+    testBot.sendCommand(user1, chat, "/start"),
+    testBot.sendCommand(user2, chat, "/help"),
+  ]);
+
+  // Each response contains only its own bot reply
+  expect(response1.text).toBe("Welcome!");
+  expect(response2.text).toBe("Available commands...");
+});
+```
+
+### Using processUpdatesConcurrently
+
+For batch processing, use `processUpdatesConcurrently()`:
+
+```typescript
+it("processes multiple updates concurrently", async () => {
+  const users = [
+    testBot.createUser({ first_name: "Alice" }),
+    testBot.createUser({ first_name: "Bob" }),
+    testBot.createUser({ first_name: "Charlie" }),
+  ];
+  const chat = testBot.createChat({ type: "private" });
+
+  // Create updates
+  const updates = users.map((user) =>
+    testBot.createMessageUpdate(user, chat, "/start")
+  );
+
+  // Process all concurrently
+  const responses = await testBot.processUpdatesConcurrently(updates);
+
+  // Each response tracked independently
+  expect(responses).toHaveLength(3);
+  responses.forEach((response) => {
+    expect(response.messages).toHaveLength(1);
+  });
+});
+```
+
+### Per-Response API Call Tracking
+
+Each response tracks which API calls were made during that specific request:
+
+```typescript
+it("tracks API calls per response", async () => {
+  testBot.command("multi", async (ctx) => {
+    await ctx.reply("First message");
+    await ctx.reply("Second message");
+  });
+
+  const user = testBot.createUser();
+  const chat = testBot.createChat({ type: "private" });
+
+  const response = await testBot.sendCommand(user, chat, "/multi");
+
+  // Check API calls made during this response
+  expect(response.apiCalls).toHaveLength(2);
+  expect(response.hasApiCall("sendMessage")).toBe(true);
+  expect(response.getApiCallsByMethod("sendMessage")).toHaveLength(2);
+
+  // Get the last API call of a specific type
+  const lastCall = response.getLastApiCall("sendMessage");
+  expect(lastCall?.payload.text).toBe("Second message");
+});
+
+it("isolates API calls in concurrent requests", async () => {
+  const user1 = testBot.createUser();
+  const user2 = testBot.createUser();
+  const chat = testBot.createChat({ type: "private" });
+
+  const [r1, r2] = await Promise.all([
+    testBot.sendCommand(user1, chat, "/start"),
+    testBot.sendCommand(user2, chat, "/start"),
+  ]);
+
+  // Each response tracks only its own API calls
+  expect(r1.apiCalls).toHaveLength(1);
+  expect(r2.apiCalls).toHaveLength(1);
+});
+```
+
 ## Example Bot
 
 A comprehensive example bot is included in `examples/full-featured-bot/`:

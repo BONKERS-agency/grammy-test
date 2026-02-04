@@ -53,6 +53,13 @@ Test your grammY bots with confidence by simulating the complete Telegram intera
 - **BotResponse Pattern**: Fluent API for asserting bot behavior
 - **Flexible ID Inputs**: All API methods accept both string and number IDs (chat_id, user_id, etc.)
 
+### Concurrent Testing
+
+- **Race condition safe**: Uses `AsyncLocalStorage` for request-scoped response tracking
+- **Per-response API call tracking**: Each `BotResponse` tracks only its own API calls and messages
+- **Parallel processing**: Run multiple updates concurrently with `processUpdatesConcurrently()`
+- Safe to use `Promise.all()` for concurrent simulations
+
 ### Test Isolation
 
 - Each `TestBot` creates its own independent state (server, chats, users)

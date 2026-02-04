@@ -53,6 +53,12 @@ export function createMockFetch(server: TelegramServer, apiCalls: ApiCallRecord[
       record.response = result;
       apiCalls.push(record);
 
+      // Also track in the current response for per-request tracking
+      const currentResponse = server.getCurrentResponse();
+      if (currentResponse) {
+        currentResponse._addApiCall(record);
+      }
+
       return new Response(JSON.stringify({ ok: true, result }), {
         status: 200,
         headers: { "Content-Type": "application/json" },
@@ -61,6 +67,12 @@ export function createMockFetch(server: TelegramServer, apiCalls: ApiCallRecord[
       const err = error as Error & { code?: number; description?: string };
       record.error = err;
       apiCalls.push(record);
+
+      // Also track in the current response for per-request tracking
+      const currentResponse = server.getCurrentResponse();
+      if (currentResponse) {
+        currentResponse._addApiCall(record);
+      }
 
       return new Response(
         JSON.stringify({

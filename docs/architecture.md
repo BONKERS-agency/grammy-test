@@ -69,7 +69,7 @@ test/
   giveaway.test.ts         # Giveaway simulation
   passport.test.ts         # Telegram Passport data
   stories.test.ts          # Story message handling
-                           # Total: 505 tests
+                           # Total: 519 tests
 ```
 
 ## Core Components
@@ -84,6 +84,7 @@ Simulates Telegram's backend servers:
 - **Accepts string or number IDs** for chat_id, user_id, message_id, etc. (like real Telegram API)
 - Returns properly structured responses matching Telegram's API
 - Supports 50+ API methods including admin, payments, forums, and more
+- **Race condition safe**: Uses `AsyncLocalStorage` for request-scoped response tracking
 
 ```typescript
 // The bot's API calls are routed here
@@ -135,7 +136,7 @@ The `isAdmin()` method returns `true` for both administrators AND creators (owne
 
 ### BotResponse
 
-Rich response object returned by all simulation methods:
+Rich response object returned by all simulation methods. Each response tracks only its own API calls and messages, enabling safe concurrent testing:
 
 ```typescript
 interface BotResponse {
@@ -147,18 +148,22 @@ interface BotResponse {
   deletedMessages: Message[];    // Deleted messages
   keyboard?: { inline?, reply? }; // Keyboards from last message
   callbackAnswer?: { text?, showAlert? };
+  shippingAnswer?: { ok, shippingOptions?, errorMessage? };
   poll?: Poll;
   invoice?: { title, currency, total_amount };
   inlineResults?: InlineQueryResult[];
   preCheckoutAnswer?: { ok, errorMessage? };
   entities?: MessageEntity[];    // Parsed formatting entities
   error?: { code, description }; // API errors
-  apiCalls: ApiCallRecord[];     // All API calls made
+  apiCalls: ApiCallRecord[];     // API calls made DURING THIS REQUEST (per-response tracking)
 
   // Helpers
   hasText(text: string): boolean;
   hasTextContaining(substring: string): boolean;
   hasEntity(type: string): boolean;
+  hasApiCall(method: string): boolean;
+  getApiCallsByMethod(method: string): ApiCallRecord[];
+  getLastApiCall(method: string): ApiCallRecord | undefined;
 }
 ```
 
@@ -183,6 +188,7 @@ The test harness that:
 4. Provides methods to simulate user actions (returning BotResponse)
 5. Exposes role helpers: `setOwner()`, `setAdmin()`, `setMember()`, `setBotAdmin()`, `setBotMember()`
 6. Provides simulation methods for all Telegram features
+7. **Supports concurrent testing** via `processUpdatesConcurrently()` with isolated response tracking
 
 **Bot Permission Setup:**
 ```typescript
@@ -217,6 +223,40 @@ testBot.sendMessage()  →   bot.handleUpdate()
                                                    returns response
                                   ↓
                            response to ctx.reply()
+```
+
+## Concurrency & Race Condition Safety
+
+The framework uses `AsyncLocalStorage` from Node.js to provide request-scoped response tracking. This enables safe concurrent testing:
+
+```
+Request A                     Request B
+─────────────                 ─────────────
+sendCommand("/a")  ←──────→  sendCommand("/b")
+       ↓                           ↓
+runWithResponse(responseA)   runWithResponse(responseB)
+       ↓                           ↓
+   (middleware)              (middleware)
+       ↓                           ↓
+   ctx.reply()               ctx.reply()
+       ↓                           ↓
+responseA._addMessage()     responseB._addMessage()
+       ↓                           ↓
+   returns responseA         returns responseB
+```
+
+Each response only contains its own messages and API calls, even when running concurrently:
+
+```typescript
+// Safe concurrent testing
+const [responseA, responseB] = await Promise.all([
+  testBot.sendCommand(user1, chat, "/commandA"),
+  testBot.sendCommand(user2, chat, "/commandB"),
+]);
+
+// Each response tracks only its own API calls
+expect(responseA.getApiCallsByMethod("sendMessage")).toHaveLength(1);
+expect(responseB.getApiCallsByMethod("sendMessage")).toHaveLength(1);
 ```
 
 ## Extending

@@ -69,6 +69,18 @@ export class BotResponse {
   /** Pre-checkout query answer */
   preCheckoutAnswer?: { ok: boolean; errorMessage?: string };
 
+  /** Shipping query answer */
+  shippingAnswer?: {
+    shippingQueryId: string;
+    ok: boolean;
+    shippingOptions?: Array<{
+      id: string;
+      title: string;
+      prices: Array<{ label: string; amount: number }>;
+    }>;
+    errorMessage?: string;
+  };
+
   /** Error from API call (if any) */
   error?: TelegramError;
 
@@ -397,6 +409,22 @@ export class BotResponse {
    */
   _setPreCheckoutAnswer(answer: { ok: boolean; errorMessage?: string }): void {
     this.preCheckoutAnswer = answer;
+  }
+
+  /**
+   * Internal: Set shipping answer.
+   */
+  _setShippingAnswer(answer: {
+    shippingQueryId: string;
+    ok: boolean;
+    shippingOptions?: Array<{
+      id: string;
+      title: string;
+      prices: Array<{ label: string; amount: number }>;
+    }>;
+    errorMessage?: string;
+  }): void {
+    this.shippingAnswer = answer;
   }
 }
 

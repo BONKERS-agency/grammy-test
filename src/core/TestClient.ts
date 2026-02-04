@@ -38,11 +38,23 @@ export function createTestTransformer(
       record.response = result;
       callLog.push(record);
 
+      // Also track in the current response for per-request tracking
+      const currentResponse = server.getCurrentResponse();
+      if (currentResponse) {
+        currentResponse._addApiCall(record);
+      }
+
       // Return in the format grammY expects from the Telegram API
       return { ok: true as const, result };
     } catch (error) {
       record.error = error as Error;
       callLog.push(record);
+
+      // Also track in the current response for per-request tracking
+      const currentResponse = server.getCurrentResponse();
+      if (currentResponse) {
+        currentResponse._addApiCall(record);
+      }
 
       // Format error response like Telegram would
       const err = error as Error & { code?: number; description?: string };

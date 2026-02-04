@@ -104,6 +104,12 @@ export class FetchInterceptor {
       record.response = result;
       this.apiCalls.push(record);
 
+      // Also track in the current response for per-request tracking
+      const currentResponse = this.server.getCurrentResponse();
+      if (currentResponse) {
+        currentResponse._addApiCall(record);
+      }
+
       return new Response(JSON.stringify({ ok: true, result }), {
         status: 200,
         headers: { "Content-Type": "application/json" },
@@ -112,6 +118,12 @@ export class FetchInterceptor {
       const err = error as Error & { code?: number; description?: string };
       record.error = err;
       this.apiCalls.push(record);
+
+      // Also track in the current response for per-request tracking
+      const currentResponse = this.server.getCurrentResponse();
+      if (currentResponse) {
+        currentResponse._addApiCall(record);
+      }
 
       return new Response(
         JSON.stringify({

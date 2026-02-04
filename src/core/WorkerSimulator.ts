@@ -95,15 +95,10 @@ export class WorkerSimulator {
     worker: (api: Api, chatId: number) => Promise<void>,
   ): Promise<BotResponse> {
     const response = createBotResponse();
-    this.server.setCurrentResponse(response);
-
-    try {
+    return this.server.runWithResponse(response, async () => {
       await worker(this.api, chatId);
-    } finally {
-      this.server.setCurrentResponse(null);
-    }
-
-    return response;
+      return response;
+    });
   }
 
   /**
@@ -119,17 +114,12 @@ export class WorkerSimulator {
     }
 
     const response = createBotResponse();
-    this.server.setCurrentResponse(response);
-
-    try {
+    return this.server.runWithResponse(response, async () => {
       await worker(this.api, job);
       job.processedAt = new Date();
       job.response = response;
-    } finally {
-      this.server.setCurrentResponse(null);
-    }
-
-    return response;
+      return response;
+    });
   }
 
   /**

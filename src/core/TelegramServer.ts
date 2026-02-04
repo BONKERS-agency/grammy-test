@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import type {
   Audio,
   CallbackQuery,
@@ -129,8 +130,16 @@ export class TelegramServer {
     for_chats?: ChatAdministratorRights;
   } = {};
 
-  // Current response being built (for tracking API calls)
-  private currentResponse: BotResponse | null = null;
+  // Async-local storage for request-scoped response (race condition safe)
+  private responseStorage = new AsyncLocalStorage<BotResponse>();
+
+  /**
+   * Private getter for the current response from AsyncLocalStorage.
+   * Used internally by all handler methods that need to track responses.
+   */
+  private get currentResponse(): BotResponse | null {
+    return this.responseStorage.getStore() ?? null;
+  }
 
   constructor(botInfo: UserFromGetMe) {
     this.botInfo = botInfo;
@@ -239,17 +248,35 @@ export class TelegramServer {
   // === Response Tracking ===
 
   /**
-   * Set the current response being built.
+   * Run a callback with a response context (race condition safe).
+   * All API calls made within the callback will be tracked in the given response.
    */
-  setCurrentResponse(response: BotResponse | null): void {
-    this.currentResponse = response;
+  runWithResponse<T>(response: BotResponse, callback: () => T): T {
+    return this.responseStorage.run(response, callback);
   }
 
   /**
-   * Get the current response being built.
+   * Get the current response for this async context.
+   * Returns null if not within a runWithResponse callback.
    */
   getCurrentResponse(): BotResponse | null {
-    return this.currentResponse;
+    return this.responseStorage.getStore() ?? null;
+  }
+
+  /**
+   * @deprecated Use runWithResponse() instead for race condition safety.
+   * This method is kept for backwards compatibility but uses the async-local storage.
+   */
+  setCurrentResponse(response: BotResponse | null): void {
+    // This is a no-op now - callers should migrate to runWithResponse()
+    // The currentResponse is managed via AsyncLocalStorage
+    if (response !== null) {
+      // For backwards compatibility, we can't actually set it here
+      // Callers need to use runWithResponse() instead
+      console.warn(
+        "setCurrentResponse() is deprecated. Use runWithResponse() for race condition safety.",
+      );
+    }
   }
 
   // === Time Simulation ===
@@ -1501,7 +1528,7 @@ export class TelegramServer {
     this.pollState.reset();
     this.fileState.reset();
     this.updateFactory.reset();
-    this.currentResponse = null;
+    // Note: currentResponse is managed by AsyncLocalStorage and doesn't need resetting
   }
 
   private ensureChat(chat: Chat): void {
@@ -3204,12 +3231,12 @@ export class TelegramServer {
 
       // Store the answer for verification in tests
       if (this.currentResponse) {
-        (this.currentResponse as unknown as { shippingAnswer?: unknown }).shippingAnswer = {
+        this.currentResponse._setShippingAnswer({
           shippingQueryId,
           ok,
           shippingOptions,
           errorMessage,
-        };
+        });
       }
 
       return true;

@@ -621,4 +621,149 @@ describe("Concurrent Interactions", () => {
       expect(results).toHaveLength(3);
     });
   });
+
+  describe("Response Isolation (Race Condition Safety)", () => {
+    it("should isolate responses when processing concurrent requests", async () => {
+      // Bot that echoes messages with a unique response
+      testBot.on("message:text", async (ctx) => {
+        const userId = ctx.from.id;
+        await ctx.reply(`Echo for user ${userId}: ${ctx.message.text}`);
+      });
+
+      const users = Array.from({ length: 10 }, (_, i) =>
+        testBot.createUser({ id: 1000 + i, first_name: `User${i}` }),
+      );
+      const chat = testBot.createChat({ type: "group", title: "Test" });
+
+      for (const user of users) {
+        testBot.setMember(chat, user);
+      }
+
+      // Send all messages concurrently
+      const responses = await Promise.all(
+        users.map((user, i) => testBot.sendMessage(user, chat, `Message ${i}`)),
+      );
+
+      // Each response should contain exactly one message with the correct content
+      for (let i = 0; i < responses.length; i++) {
+        const response = responses[i];
+        const user = users[i];
+
+        expect(response.messages).toHaveLength(1);
+        expect(response.text).toBe(`Echo for user ${user.id}: Message ${i}`);
+      }
+    });
+
+    it("should isolate callback responses when clicking buttons concurrently", async () => {
+      testBot.command("action", (ctx) =>
+        ctx.reply("Choose:", {
+          reply_markup: {
+            inline_keyboard: [[{ text: "Click", callback_data: "action" }]],
+          },
+        }),
+      );
+
+      testBot.callbackQuery("action", async (ctx) => {
+        await ctx.answerCallbackQuery(`Clicked by ${ctx.from.first_name}`);
+      });
+
+      const users = Array.from({ length: 5 }, (_, i) =>
+        testBot.createUser({ id: 2000 + i, first_name: `Clicker${i}` }),
+      );
+      const chat = testBot.createChat({ type: "group", title: "Test" });
+
+      for (const user of users) {
+        testBot.setMember(chat, user);
+      }
+
+      // Create separate action messages for each user to avoid message edit conflicts
+      const messages = await Promise.all(
+        users.map((user) => testBot.sendCommand(user, chat, "/action")),
+      );
+
+      // All users click their own buttons concurrently
+      const responses = await Promise.all(
+        users.map((user, i) => testBot.clickButton(user, chat, "action", messages[i].messages[0])),
+      );
+
+      // Each response should have the correct callback answer for that user
+      for (let i = 0; i < responses.length; i++) {
+        const response = responses[i];
+        const user = users[i];
+
+        expect(response.callbackAnswer?.text).toBe(`Clicked by ${user.first_name}`);
+      }
+    });
+
+    it("should isolate inline query responses concurrently", async () => {
+      testBot.on("inline_query", (ctx) => {
+        return ctx.answerInlineQuery([
+          {
+            type: "article",
+            id: `result_${ctx.from.id}`,
+            title: `Result for ${ctx.from.first_name}`,
+            input_message_content: { message_text: ctx.inlineQuery.query },
+          },
+        ]);
+      });
+
+      const users = Array.from({ length: 5 }, (_, i) =>
+        testBot.createUser({ id: 3000 + i, first_name: `Searcher${i}` }),
+      );
+
+      // All send inline queries concurrently
+      const responses = await Promise.all(
+        users.map((user, i) => testBot.sendInlineQuery(user, `Query ${i}`)),
+      );
+
+      // Each response should have the correct inline results for that user
+      for (let i = 0; i < responses.length; i++) {
+        const response = responses[i];
+        const user = users[i];
+
+        expect(response.inlineResults).toHaveLength(1);
+        expect(response.inlineResults?.[0].id).toBe(`result_${user.id}`);
+      }
+    });
+
+    it("should track API calls per-response in concurrent requests", async () => {
+      testBot.on("message:text", async (ctx) => {
+        // Each handler makes multiple API calls
+        await ctx.reply(`Echo: ${ctx.message.text}`);
+        await ctx.reply(`From: ${ctx.from.first_name}`);
+      });
+
+      const users = Array.from({ length: 5 }, (_, i) =>
+        testBot.createUser({ id: 4000 + i, first_name: `ApiTracker${i}` }),
+      );
+      const chat = testBot.createChat({ type: "group", title: "API Test" });
+
+      for (const user of users) {
+        testBot.setMember(chat, user);
+      }
+
+      // Send messages concurrently
+      const responses = await Promise.all(
+        users.map((user, i) => testBot.sendMessage(user, chat, `Message ${i}`)),
+      );
+
+      // Each response should have exactly 2 sendMessage API calls
+      for (let i = 0; i < responses.length; i++) {
+        const response = responses[i];
+        const user = users[i];
+
+        // Check per-response API calls
+        const sendMessageCalls = response.getApiCallsByMethod("sendMessage");
+        expect(sendMessageCalls).toHaveLength(2);
+
+        // Verify the calls are for the correct user's request
+        expect(sendMessageCalls[0].payload.text).toBe(`Echo: Message ${i}`);
+        expect(sendMessageCalls[1].payload.text).toBe(`From: ${user.first_name}`);
+      }
+
+      // Global API calls should have all 10 calls (5 users * 2 calls each)
+      const allCalls = testBot.getApiCalls().filter((c) => c.method === "sendMessage");
+      expect(allCalls).toHaveLength(10);
+    });
+  });
 });
